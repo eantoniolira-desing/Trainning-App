@@ -96,6 +96,8 @@ export interface CoachProfile {
   phone: string
   email: string
   photo?: string
+  username?: string
+  password?: string
 }
 
 export interface ExerciseLog {

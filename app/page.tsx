@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getAthletes, initDB } from '@/lib/db'
+import { getAthletes, getCoachProfile, initDB } from '@/lib/db'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,12 +21,19 @@ export default function LoginPage() {
     setError('')
 
     if (role === 'coach') {
-      // Coach login
-      if ((username === 'entrenador' && password === '123') || (!username && !password)) {
-        // Allow empty bypass or specific credentials
+      const MASTER_USER = 'Administrador'
+      const MASTER_PASS = 'Concorde2'
+      const coachProfile = getCoachProfile()
+      const coachUser = coachProfile.username || 'Oscar'
+      const coachPass = coachProfile.password || 'Tocayo'
+
+      const isMaster = username === MASTER_USER && password === MASTER_PASS
+      const isCoach = username.toLowerCase() === coachUser.toLowerCase() && password === coachPass
+
+      if (isMaster || isCoach) {
         router.push('/coach/dashboard')
       } else {
-        setError('Usuario o contraseña del entrenador incorrectos.')
+        setError('Usuario o contraseña incorrectos.')
       }
     } else {
       // Athlete login

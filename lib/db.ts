@@ -14,7 +14,9 @@ const DEFAULT_COACH: CoachProfile = {
   age: 32,
   phone: '+52 55 9876 5432',
   email: 'contacto@oscarbarron.fit',
-  photo: '' // Empty or Base64 string
+  photo: '',
+  username: 'Oscar',
+  password: 'Tocayo',
 };
 
 // Seed default athletes with usernames & passwords & zones & details

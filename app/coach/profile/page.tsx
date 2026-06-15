@@ -15,6 +15,10 @@ export default function CoachProfilePage() {
   const [form, setForm] = useState({ name: '', age: '', phone: '', email: '', photo: '' })
   const [saving, setSaving] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [creds, setCreds] = useState({ username: '', password: '', confirm: '' })
+  const [credsSaving, setCredsSaving] = useState(false)
+  const [credsSuccess, setCredsSuccess] = useState(false)
+  const [credsError, setCredsError] = useState('')
 
   useEffect(() => {
     const data = getCoachProfile()
@@ -26,6 +30,7 @@ export default function CoachProfilePage() {
       email: data.email || '',
       photo: data.photo || ''
     })
+    setCreds({ username: data.username || '', password: '', confirm: '' })
   }, [])
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -38,6 +43,25 @@ export default function CoachProfilePage() {
       setForm(prev => ({ ...prev, photo: base64String }))
     };
     reader.readAsDataURL(file)
+  }
+
+  const handleSaveCreds = (e: React.FormEvent) => {
+    e.preventDefault()
+    setCredsError('')
+    if (!creds.username.trim()) { setCredsError('El usuario no puede estar vacío.'); return }
+    if (creds.password.length < 4) { setCredsError('La contraseña debe tener al menos 4 caracteres.'); return }
+    if (creds.password !== creds.confirm) { setCredsError('Las contraseñas no coinciden.'); return }
+
+    setCredsSaving(true)
+    const current = getCoachProfile()
+    const updated: CoachProfile = { ...current, username: creds.username.trim(), password: creds.password }
+    setTimeout(() => {
+      saveCoachProfile(updated)
+      setCreds({ username: creds.username.trim(), password: '', confirm: '' })
+      setCredsSaving(false)
+      setCredsSuccess(true)
+      setTimeout(() => setCredsSuccess(false), 2500)
+    }, 600)
   }
 
   const handleSave = (e: React.FormEvent) => {
@@ -224,6 +248,81 @@ export default function CoachProfilePage() {
             >
               <span>{saving ? 'Guardando...' : 'Guardar Perfil'}</span>
               {!saving && <span className="arrow">→</span>}
+            </button>
+          </div>
+        </form>
+      </div>
+      {/* Credentials card */}
+      <div
+        className="rounded-2xl p-8 animate-fade-up delay-2 mt-6"
+        style={{ background: '#FFFFFF', border: '1px solid #E8E9EB' }}
+      >
+        <div className="mb-6 pb-4" style={{ borderBottom: '1px solid #E8E9EB' }}>
+          <h2 className="text-sm font-bold text-[#1C1F23]">Credenciales de Acceso</h2>
+          <p className="text-xs mt-1" style={{ color: '#7A7E85' }}>
+            Cambia tu usuario y contraseña para entrar a la plataforma.
+          </p>
+        </div>
+
+        <form onSubmit={handleSaveCreds} className="space-y-4">
+          <div>
+            <label className={labelCls}>Usuario</label>
+            <input
+              type="text"
+              required
+              value={creds.username}
+              onChange={e => setCreds(prev => ({ ...prev, username: e.target.value }))}
+              placeholder="Tu usuario de acceso"
+              className={inputCls}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Nueva contraseña</label>
+              <input
+                type="password"
+                required
+                value={creds.password}
+                onChange={e => setCreds(prev => ({ ...prev, password: e.target.value }))}
+                placeholder="Mínimo 4 caracteres"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>Confirmar contraseña</label>
+              <input
+                type="password"
+                required
+                value={creds.confirm}
+                onChange={e => setCreds(prev => ({ ...prev, confirm: e.target.value }))}
+                placeholder="Repite la contraseña"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          {credsError && (
+            <div className="p-3 rounded-xl text-xs font-medium" style={{ background: 'rgba(239,68,68,0.08)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>
+              {credsError}
+            </div>
+          )}
+
+          {credsSuccess && (
+            <div className="p-3.5 rounded-xl text-xs font-semibold flex items-center gap-2" style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
+              <span>✓</span> Credenciales actualizadas correctamente.
+            </div>
+          )}
+
+          <div className="pt-4" style={{ borderTop: '1px solid #E8E9EB' }}>
+            <button
+              type="submit"
+              disabled={credsSaving}
+              className="btn-primary justify-center"
+              style={{ borderRadius: '0.75rem', padding: '0.625rem 1.25rem', opacity: credsSaving ? 0.6 : 1 }}
+            >
+              <span>{credsSaving ? 'Guardando...' : 'Actualizar credenciales'}</span>
+              {!credsSaving && <span className="arrow">→</span>}
             </button>
           </div>
         </form>
