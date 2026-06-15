@@ -1,0 +1,199 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Space Grotesk', sans-serif;
+  --font-body: 'Montserrat', sans-serif;
+
+  --color-brand-dark:    #1C1F23;
+  --color-brand:         #4A4F57;
+  --color-brand-hover:   #3a3f47;
+  --color-brand-mid:     #7A7E85;
+  --color-brand-pale:    #D5D8DD;
+  --color-brand-surface: #F5F5F6;
+  --color-acento:        #A8FF00;
+}
+
+/* ── Design tokens (web-premium: secc. 2) ─────────────────────── */
+:root {
+  /* Spacing — 8px base grid (design-premium: secc. 4) */
+  --space-1:  0.25rem;
+  --space-2:  0.5rem;
+  --space-3:  0.75rem;
+  --space-4:  1rem;
+  --space-5:  1.25rem;
+  --space-6:  1.5rem;
+  --space-8:  2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  /* Radii */
+  --radius-sm:  0.5rem;
+  --radius-md:  0.875rem;
+  --radius-lg:  1.25rem;
+  --radius-xl:  1.75rem;
+  --radius-2xl: 2rem;
+
+  /* Shadows */
+  --shadow-sm:  0 1px 4px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md:  0 4px 24px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06);
+  --shadow-lg:  0 20px 60px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.10);
+  --shadow-glow: 0 0 48px rgba(168,255,0,0.12);
+
+  /* Easing (web-premium: secc. 2) */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-out:    cubic-bezier(0, 0, 0.2, 1);
+
+  --dur-fast: 120ms;
+  --dur-base: 240ms;
+  --dur-slow: 480ms;
+}
+
+/* ── Base ─────────────────────────────────────────────────────── */
+body {
+  background: #F5F5F6;
+  color: #1C1F23;
+  font-family: var(--font-montserrat), 'Montserrat', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tipografía — tracking negativo en headings (design-premium: secc. 3) */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-space-grotesk), 'Space Grotesk', sans-serif;
+  letter-spacing: -0.025em;
+}
+
+/* ── Eyebrow label (design-premium: Nivel 4) ─────────────────── */
+.eyebrow {
+  font-family: var(--font-space-grotesk), 'Space Grotesk', sans-serif;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #7A7E85;
+}
+
+/* ── Glassmorphism (web-premium: secc. 2) ────────────────────── */
+.glass {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.glass-hover {
+  transition: background var(--dur-base) var(--ease-smooth),
+              border-color var(--dur-base) var(--ease-smooth);
+}
+
+.glass-hover:hover {
+  background: rgba(255, 255, 255, 0.10);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+/* ── Premium card (web-premium: secc. 5) ────────────────────── */
+.card-premium {
+  position: relative;
+  overflow: hidden;
+  transition: transform var(--dur-base) var(--ease-smooth),
+              box-shadow var(--dur-base) var(--ease-smooth);
+}
+
+.card-premium::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 0%,
+    rgba(168, 255, 0, 0.07) 0%,
+    transparent 65%);
+  opacity: 0;
+  transition: opacity var(--dur-base);
+  pointer-events: none;
+}
+
+.card-premium:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-lg);
+}
+
+.card-premium:hover::after {
+  opacity: 1;
+}
+
+/* ── Premium button (web-premium: secc. 5) ─────────────────── */
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.875rem 1.75rem;
+  background: #1C1F23;
+  color: #fff;
+  font-family: var(--font-space-grotesk), 'Space Grotesk', sans-serif;
+  font-weight: 600;
+  font-size: 0.875rem;
+  letter-spacing: 0.02em;
+  border: none;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background var(--dur-base) var(--ease-smooth),
+              color var(--dur-base) var(--ease-smooth),
+              transform var(--dur-fast) var(--ease-spring);
+}
+
+.btn-primary:hover {
+  background: #A8FF00;
+  color: #1C1F23;
+  transform: translateY(-1px);
+}
+
+.btn-primary .arrow {
+  display: inline-block;
+  transition: transform var(--dur-base) var(--ease-spring);
+}
+
+.btn-primary:hover .arrow {
+  transform: translateX(3px);
+}
+
+/* ── Animations (web-premium: secc. 2) ─────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.animate-fade-up {
+  animation: fade-up var(--dur-slow) var(--ease-spring) both;
+}
+
+.delay-1 { animation-delay: 80ms; }
+.delay-2 { animation-delay: 160ms; }
+.delay-3 { animation-delay: 240ms; }
+.delay-4 { animation-delay: 320ms; }
+
+/* Reducir movimiento — accesibilidad (web-premium: secc. 9) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Scrollbar premium ─────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2d3035; border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: #4A4F57; }
+
+/* ── Focus visible ─────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #A8FF00;
+  outline-offset: 3px;
+  border-radius: 4px;
+}
