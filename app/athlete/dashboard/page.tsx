@@ -1035,10 +1035,8 @@ export default function AthleteDashboard() {
                                 </div>
                               </div>
                             ) : (
-                              /* Strength library picker */
+                              /* Strength library picker — compact grid */
                               <div className="mb-4">
-                                <p className="eyebrow text-[9px] mb-2 text-[#7A7E85]">Ejercicios Realizados</p>
-
                                 {/* Section tabs */}
                                 <div className="flex gap-1 mb-3">
                                   {STRENGTH_SECTIONS.map(sect => {
@@ -1069,8 +1067,27 @@ export default function AthleteDashboard() {
                                   })}
                                 </div>
 
-                                {/* Exercise rows */}
-                                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                                {/* "Rutina completa" button */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const currentRoutine = strengthOpenRoutine[ex.id] ?? 'inferior'
+                                    const routineExs = strengthExercises.filter(se => se.routine === currentRoutine)
+                                    const newSels: Record<string, { series: string; reps: string }> = {}
+                                    for (const se of routineExs) {
+                                      newSels[se.id] = { series: String(se.series || 2), reps: se.reps || '' }
+                                    }
+                                    setStrengthSels(prev => ({ ...prev, [ex.id]: newSels }))
+                                    setLogs(prev => ({ ...prev, [ex.id]: { ...prev[ex.id], completed: true } }))
+                                  }}
+                                  className="w-full mb-3 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-2"
+                                  style={{ background: '#A8FF00', color: '#1C1F23', border: 'none' }}
+                                >
+                                  <span>✓</span> Hice la rutina completa
+                                </button>
+
+                                {/* Compact 2-col card grid */}
+                                <div className="grid grid-cols-2 gap-2">
                                   {strengthExercises
                                     .filter(se => se.routine === (strengthOpenRoutine[ex.id] ?? 'inferior'))
                                     .map(se => {
@@ -1079,36 +1096,38 @@ export default function AthleteDashboard() {
                                       return (
                                         <div
                                           key={se.id}
-                                          className="flex items-center gap-2 px-2.5 py-2 rounded-xl transition-all"
+                                          className="rounded-xl p-3 transition-all cursor-pointer select-none"
                                           style={{
-                                            background: isChecked ? 'rgba(168,255,0,0.04)' : '#F9FAFB',
-                                            border: `1px solid ${isChecked ? 'rgba(168,255,0,0.25)' : '#EFEFEF'}`,
+                                            background: isChecked ? 'rgba(168,255,0,0.06)' : '#F9FAFB',
+                                            border: `1.5px solid ${isChecked ? 'rgba(168,255,0,0.4)' : '#EFEFEF'}`,
                                           }}
+                                          onClick={() => setStrengthSels(prev => {
+                                            const planSels = { ...(prev[ex.id] || {}) }
+                                            if (planSels[se.id]) { delete planSels[se.id] }
+                                            else { planSels[se.id] = { series: String(se.series || 2), reps: se.reps || '' } }
+                                            return { ...prev, [ex.id]: planSels }
+                                          })}
                                         >
-                                          {/* Checkbox */}
-                                          <button
-                                            type="button"
-                                            onClick={() => setStrengthSels(prev => {
-                                              const planSels = { ...(prev[ex.id] || {}) }
-                                              if (planSels[se.id]) { delete planSels[se.id] }
-                                              else { planSels[se.id] = { series: '', reps: '' } }
-                                              return { ...prev, [ex.id]: planSels }
-                                            })}
-                                            className="w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center transition-all cursor-pointer"
-                                            style={{
-                                              background: isChecked ? '#A8FF00' : 'transparent',
-                                              border: isChecked ? 'none' : '1.5px solid #D5D8DD',
-                                            }}
-                                          >
-                                            {isChecked && <span className="text-[9px] font-black text-[#1C1F23]">✓</span>}
-                                          </button>
+                                          {/* Name row */}
+                                          <div className="flex items-start gap-1.5">
+                                            <span
+                                              className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center mt-0.5"
+                                              style={{
+                                                background: isChecked ? '#A8FF00' : 'transparent',
+                                                border: isChecked ? 'none' : '1.5px solid #D5D8DD',
+                                              }}
+                                            >
+                                              {isChecked && <span className="text-[8px] font-black text-[#1C1F23]">✓</span>}
+                                            </span>
+                                            <span className="text-[11px] font-semibold text-gray-800 leading-tight">{se.name}</span>
+                                          </div>
 
-                                          {/* Name */}
-                                          <span className="text-xs text-gray-700 flex-1 min-w-0 truncate">{se.name}</span>
-
-                                          {/* Series × Reps inputs when checked */}
+                                          {/* Inputs when checked */}
                                           {isChecked && (
-                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                            <div
+                                              className="flex items-center gap-1 mt-2 pl-5"
+                                              onClick={e => e.stopPropagation()}
+                                            >
                                               <input
                                                 type="number"
                                                 min="1"
@@ -1117,10 +1136,10 @@ export default function AthleteDashboard() {
                                                   ...prev,
                                                   [ex.id]: { ...(prev[ex.id] || {}), [se.id]: { ...vals, series: e.target.value } }
                                                 }))}
-                                                placeholder={se.series ? String(se.series) : 'S'}
-                                                className="w-10 rounded-lg px-1.5 py-1 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none focus:border-gray-500 text-center"
+                                                placeholder={String(se.series || 2)}
+                                                className="w-10 rounded-lg px-1 py-1 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none text-center"
                                               />
-                                              <span className="text-[10px] text-gray-400 font-bold">×</span>
+                                              <span className="text-[10px] text-gray-400 font-bold flex-shrink-0">×</span>
                                               <input
                                                 type="text"
                                                 value={vals.reps}
@@ -1128,8 +1147,8 @@ export default function AthleteDashboard() {
                                                   ...prev,
                                                   [ex.id]: { ...(prev[ex.id] || {}), [se.id]: { ...vals, reps: e.target.value } }
                                                 }))}
-                                                placeholder={se.reps || 'R'}
-                                                className="w-14 rounded-lg px-1.5 py-1 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none focus:border-gray-500 text-center"
+                                                placeholder={se.reps || 'Reps'}
+                                                className="w-full rounded-lg px-1 py-1 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none text-center"
                                               />
                                             </div>
                                           )}
@@ -1138,10 +1157,16 @@ export default function AthleteDashboard() {
                                     })}
                                 </div>
 
-                                {/* Summary count */}
                                 {Object.keys(strengthSels[ex.id] || {}).length > 0 && (
                                   <p className="mt-2 text-[10px] text-[#7A7E85]">
-                                    {Object.keys(strengthSels[ex.id]).length} ejercicio(s) registrado(s)
+                                    {Object.keys(strengthSels[ex.id]).length} ejercicio(s) registrado(s) ·{' '}
+                                    <button
+                                      type="button"
+                                      className="underline cursor-pointer"
+                                      onClick={() => setStrengthSels(prev => ({ ...prev, [ex.id]: {} }))}
+                                    >
+                                      Limpiar
+                                    </button>
                                   </p>
                                 )}
                               </div>
