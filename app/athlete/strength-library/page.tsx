@@ -17,30 +17,24 @@ const SECTIONS = [
     title: 'Fuerza en Gym',
     subtitle: 'Tren Inferior',
     description: 'Cuádriceps, glúteos, isquiotibiales, gemelos y cadera.',
-    color: '#6366F1',
-    bg: 'rgba(99,102,241,0.06)',
-    border: 'rgba(99,102,241,0.18)',
-    icon: '🦵',
+    accent: '#A8FF00',
+    preview: { pdfFile: 'tronco-inferior', pdfPage: 3, position: 'bottom' as const },
   },
   {
     id: 'superior',
     title: 'Fuerza en Gym',
     subtitle: 'Tren Superior',
-    description: 'Empuje, tirón, core y estabilización lumbar.',
-    color: '#047857',
-    bg: 'rgba(4,120,87,0.06)',
-    border: 'rgba(4,120,87,0.18)',
-    icon: '💪',
+    description: 'Pecho, hombros, espalda, core y estabilización lumbar.',
+    accent: '#60B4FF',
+    preview: { pdfFile: 'tronco-superior', pdfPage: 2, position: 'top' as const },
   },
   {
     id: 'casa',
     title: 'Fuerza en Casa',
     subtitle: 'Banda Elástica',
     description: 'Pie, tobillo, cadera e isquiotibiales con banda elástica.',
-    color: '#D97706',
-    bg: 'rgba(217,119,6,0.06)',
-    border: 'rgba(217,119,6,0.18)',
-    icon: '🏠',
+    accent: '#FFD60A',
+    preview: { pdfFile: 'en-casa', pdfPage: 5, position: 'top' as const },
   },
 ]
 
@@ -58,11 +52,11 @@ export default function AthleteStrengthLibrary() {
 
   if (!mounted) {
     return (
-      <div className="max-w-2xl mx-auto p-5 pt-8 animate-pulse">
-        <div className="h-8 bg-gray-200 rounded-xl w-1/3 mb-8" />
-        <div className="space-y-4">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-28 bg-gray-200 rounded-2xl" />)}
-        </div>
+      <div className="max-w-2xl mx-auto p-5 pt-8 space-y-4">
+        <div className="h-8 bg-gray-200 rounded-xl w-1/3 mb-8 animate-pulse" />
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-36 rounded-2xl animate-pulse" style={{ background: '#1C1F23', opacity: 0.15 }} />
+        ))}
       </div>
     )
   }
@@ -108,7 +102,7 @@ export default function AthleteStrengthLibrary() {
         </Link>
       )}
 
-      {/* ── MENU DE SELECCIÓN ── */}
+      {/* ── MENÚ DE SELECCIÓN ── */}
       {!activeSection && (
         <>
           <div className="mb-8">
@@ -117,7 +111,7 @@ export default function AthleteStrengthLibrary() {
               Biblioteca de Fuerza
             </h1>
             <p className="text-sm text-[#7A7E85] mt-1">
-              Selecciona una rutina para ver los ejercicios con guías e instrucciones.
+              Selecciona una rutina para ver los ejercicios con guías técnicas.
             </p>
           </div>
 
@@ -129,29 +123,49 @@ export default function AthleteStrengthLibrary() {
                   key={sect.id}
                   type="button"
                   onClick={() => setActiveSection(sect.id)}
-                  className="w-full text-left rounded-2xl p-6 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
-                  style={{ background: sect.bg, border: `1.5px solid ${sect.border}` }}
+                  className="w-full text-left rounded-2xl overflow-hidden flex transition-all duration-200 hover:shadow-xl hover:-translate-y-0.5 cursor-pointer"
+                  style={{ background: '#1C1F23', minHeight: 148 }}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <span className="text-3xl">{sect.icon}</span>
-                      <div>
-                        <p className="text-[10px] font-bold uppercase tracking-widest mb-0.5" style={{ color: sect.color }}>
-                          {sect.title}
-                        </p>
-                        <h2 className="text-lg font-bold text-[#1C1F23]">{sect.subtitle}</h2>
-                        <p className="text-xs text-[#7A7E85] mt-1">{sect.description}</p>
-                      </div>
+                  {/* Text side */}
+                  <div className="flex-1 p-5 flex flex-col justify-between min-w-0">
+                    <div>
+                      <p
+                        className="text-[10px] font-bold uppercase tracking-widest mb-1"
+                        style={{ color: sect.accent }}
+                      >
+                        {sect.title}
+                      </p>
+                      <h2
+                        className="text-xl font-black text-white leading-tight"
+                        style={{ letterSpacing: '-0.02em' }}
+                      >
+                        {sect.subtitle}
+                      </h2>
+                      <p className="text-xs mt-2 leading-relaxed" style={{ color: 'rgba(255,255,255,0.42)' }}>
+                        {sect.description}
+                      </p>
                     </div>
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0 ml-4">
+                    <div className="flex items-center gap-2 mt-4">
                       <span
-                        className="text-[10px] font-bold px-2.5 py-1 rounded-full"
-                        style={{ background: sect.color, color: '#fff' }}
+                        className="text-[10px] font-black px-2.5 py-1 rounded-full"
+                        style={{ background: sect.accent, color: '#1C1F23' }}
                       >
                         {count} ejercicios
                       </span>
-                      <span className="text-lg" style={{ color: sect.color }}>→</span>
+                      <span className="text-sm font-bold" style={{ color: sect.accent }}>→</span>
                     </div>
+                  </div>
+
+                  {/* Image side */}
+                  <div
+                    className="flex-shrink-0 overflow-hidden"
+                    style={{ width: 148, background: '#2A2D35' }}
+                  >
+                    <ExercisePdfImage
+                      pdfFile={sect.preview.pdfFile}
+                      page={sect.preview.pdfPage}
+                      position={sect.preview.position}
+                    />
                   </div>
                 </button>
               )
@@ -163,9 +177,11 @@ export default function AthleteStrengthLibrary() {
       {/* ── LISTA DE EJERCICIOS DE LA SECCIÓN ── */}
       {activeSection && currentSection && (
         <>
-          {/* Section header */}
           <div className="mb-6">
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: currentSection.color }}>
+            <p
+              className="text-[10px] font-bold uppercase tracking-widest mb-1"
+              style={{ color: currentSection.accent }}
+            >
               {currentSection.title}
             </p>
             <h1 className="text-3xl font-bold text-gray-900" style={{ letterSpacing: '-0.025em' }}>
@@ -174,7 +190,6 @@ export default function AthleteStrengthLibrary() {
             <p className="text-sm text-[#7A7E85] mt-1">{currentSection.description}</p>
           </div>
 
-          {/* Search */}
           <div className="mb-6">
             <input
               type="text"
@@ -187,7 +202,6 @@ export default function AthleteStrengthLibrary() {
 
           {sectionExercises.length === 0 ? (
             <div className="text-center py-16 text-gray-400">
-              <span className="text-4xl block mb-3">🔍</span>
               <p className="font-semibold">No se encontraron ejercicios</p>
             </div>
           ) : (
@@ -205,11 +219,11 @@ export default function AthleteStrengthLibrary() {
                       position={ex.photoPosition ?? 'top'}
                     />
                   ) : (
-                    <div className="w-full flex items-center justify-center" style={{ minHeight: 120, background: currentSection.bg }}>
-                      <span className="text-3xl">{currentSection.icon}</span>
-                    </div>
+                    <div
+                      className="w-full flex items-center justify-center"
+                      style={{ minHeight: 120, background: '#F5F5F6' }}
+                    />
                   )}
-
                   <div className="p-4 flex-1 flex flex-col">
                     <h3 className="font-bold text-sm text-gray-900 leading-tight mb-1">{ex.name}</h3>
                     {ex.description && (
@@ -310,7 +324,7 @@ export default function AthleteStrengthLibrary() {
 
               {selected.instructions && (
                 <div className="bg-[#F5F5F6] border border-[#E8E9EB] rounded-xl p-4">
-                  <h4 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide">Instrucciones de Ejecución</h4>
+                  <h4 className="text-xs font-bold text-gray-900 mb-2 uppercase tracking-wide">Instrucciones</h4>
                   <p className="text-xs text-[#4A4F57] whitespace-pre-line leading-relaxed">{selected.instructions}</p>
                 </div>
               )}
