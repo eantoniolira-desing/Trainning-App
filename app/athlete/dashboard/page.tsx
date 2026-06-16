@@ -258,13 +258,28 @@ export default function AthleteDashboard() {
     if (!athlete) return
     const reader = new FileReader()
     reader.onload = e => {
-      const url = e.target?.result as string
-      setPhoto(url)
-      try {
-        localStorage.setItem(`athlete-photo-${athlete.id}`, url)
-        // Dispatch event to sync profiles
-        window.dispatchEvent(new Event('athlete-photo-updated'))
-      } catch {}
+      const original = e.target?.result as string
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 400
+        let w = img.width, h = img.height
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else        { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        const compressed = canvas.toDataURL('image/jpeg', 0.82)
+        setPhoto(compressed)
+        try {
+          localStorage.setItem(`athlete-photo-${athlete.id}`, compressed)
+          window.dispatchEvent(new Event('athlete-photo-updated'))
+        } catch {
+          const smaller = canvas.toDataURL('image/jpeg', 0.5)
+          try { localStorage.setItem(`athlete-photo-${athlete.id}`, smaller); setPhoto(smaller) } catch {}
+        }
+      }
+      img.src = original
     }
     reader.readAsDataURL(file)
   }

@@ -39,9 +39,21 @@ export default function CoachProfilePage() {
 
     const reader = new FileReader()
     reader.onloadend = () => {
-      const base64String = reader.result as string
-      setForm(prev => ({ ...prev, photo: base64String }))
-    };
+      const original = reader.result as string
+      const img = new Image()
+      img.onload = () => {
+        const MAX = 400
+        let w = img.width, h = img.height
+        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
+        else        { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
+        const canvas = document.createElement('canvas')
+        canvas.width = w
+        canvas.height = h
+        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
+        setForm(prev => ({ ...prev, photo: canvas.toDataURL('image/jpeg', 0.82) }))
+      }
+      img.src = original
+    }
     reader.readAsDataURL(file)
   }
 
