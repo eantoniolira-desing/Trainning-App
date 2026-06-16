@@ -111,6 +111,7 @@ export interface ExerciseLog {
   actualPace?: string
   rpe?: number
   notes?: string
+  strengthEntries?: Array<{ libraryId: string; name: string; series: string; reps: string }>
 }
 
 export interface StrengthExercise {

@@ -41,6 +41,12 @@ const EMOJI_OPTIONS = [
   { value: 5, emoji: '🔥', label: 'Excelente / Energía' }
 ]
 
+const STRENGTH_SECTIONS = [
+  { id: 'inferior', label: 'Tren Inferior' },
+  { id: 'superior', label: 'Tren Superior' },
+  { id: 'casa',     label: 'En Casa' },
+]
+
 export default function AthleteDashboard() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -73,7 +79,30 @@ export default function AthleteDashboard() {
   const [strengthExercises, setStrengthExercises] = useState<StrengthExercise[]>([])
   const [showGuide, setShowGuide] = useState<StrengthExercise | null>(null)
 
+  // Strength exercise selections per plan-exercise: planExId → libExId → {series, reps}
+  const [strengthSels, setStrengthSels] = useState<Record<string, Record<string, { series: string; reps: string }>>>({})
+  const [strengthOpenRoutine, setStrengthOpenRoutine] = useState<Record<string, string>>({})
+
   const [athleteReplyText, setAthleteReplyText] = useState('')
+
+  const initStrengthFromDay = (day: TrainingDay) => {
+    const sels: Record<string, Record<string, { series: string; reps: string }>> = {}
+    const openRoutines: Record<string, string> = {}
+    for (const ex of day.exercises) {
+      if (ex.type === 'strength') {
+        openRoutines[ex.id] = 'inferior'
+        const entries = (day.logs || {})[ex.id]?.strengthEntries
+        if (entries?.length) {
+          sels[ex.id] = {}
+          for (const entry of entries) {
+            sels[ex.id][entry.libraryId] = { series: entry.series, reps: entry.reps }
+          }
+        }
+      }
+    }
+    setStrengthSels(sels)
+    setStrengthOpenRoutine(openRoutines)
+  }
 
   const loadLatestPlan = () => {
     const athleteId = localStorage.getItem('active_athlete_id')
@@ -164,7 +193,7 @@ export default function AthleteDashboard() {
         setSelectedEmoji(foundDay.feedback?.feelingEmoji || '')
         setSessionComments(foundDay.feedback?.comments || '')
         setSaved(false)
-        // Scroll to logger card
+        initStrengthFromDay(foundDay)
         setTimeout(() => loggerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100)
       }
     }
@@ -215,6 +244,7 @@ export default function AthleteDashboard() {
         setSelectedRating(initialSession.feedback?.feelingRating || 0)
         setSelectedEmoji(initialSession.feedback?.feelingEmoji || '')
         setSessionComments(initialSession.feedback?.comments || '')
+        initStrengthFromDay(initialSession)
       }
     }
 
@@ -281,21 +311,34 @@ export default function AthleteDashboard() {
   }
 
   const handleSelectDay = (day: TrainingDay) => {
-    // Toggle expand in calendar
     setExpandedDayId(prev => prev === day.id ? null : day.id)
-    // Also load into logger
     setSession(day)
     setLogs(day.logs || {})
     setSelectedRating(day.feedback?.feelingRating || 0)
     setSelectedEmoji(day.feedback?.feelingEmoji || '')
     setSessionComments(day.feedback?.comments || '')
     setSaved(false)
+    initStrengthFromDay(day)
   }
 
   const handleSaveSession = () => {
     if (!athlete || !plan || !session) return
 
-    // Update plans database
+    // Merge strength selections into logs before saving
+    const finalLogs = { ...logs } as Record<string, ExerciseLog>
+    for (const ex of session.exercises) {
+      if (ex.type === 'strength') {
+        const sels = strengthSels[ex.id] || {}
+        const strengthEntries = Object.entries(sels).map(([libId, vals]) => ({
+          libraryId: libId,
+          name: strengthExercises.find(se => se.id === libId)?.name || libId,
+          series: vals.series,
+          reps: vals.reps,
+        }))
+        finalLogs[ex.id] = { ...(finalLogs[ex.id] || {}), exerciseId: ex.id, completed: !!(finalLogs[ex.id]?.completed), strengthEntries }
+      }
+    }
+
     const updatedWeeks = plan.weeks.map(week => {
       const dayExists = week.days.some(d => d.id === session.id)
       if (dayExists) {
@@ -303,7 +346,7 @@ export default function AthleteDashboard() {
           if (d.id === session.id) {
             return {
               ...d,
-              logs: logs as Record<string, ExerciseLog>,
+              logs: finalLogs,
               feedback: {
                 completed: true,
                 feelingRating: selectedRating || 3,
@@ -947,11 +990,16 @@ export default function AthleteDashboard() {
                               <p className="eyebrow text-[9px] mb-1 text-[#7A7E85]">Planificado</p>
                               <p className="text-xs text-[#4A4F57] font-semibold">
                                 {ex.type === 'strength' ? (
-                                  <>
-                                    {ex.sets} series × {ex.reps} reps
-                                    {ex.weight && <span className="text-gray-400"> · {ex.weight} kg</span>}
-                                    {ex.rest && <span className="text-gray-400"> · {ex.rest}s desc.</span>}
-                                  </>
+                                  ex.notes ? (
+                                    <span className="font-normal italic text-[#7A7E85]">{ex.notes}</span>
+                                  ) : ex.sets ? (
+                                    <>
+                                      {ex.sets} series × {ex.reps} reps
+                                      {ex.weight && <span className="text-gray-400"> · {ex.weight} kg</span>}
+                                    </>
+                                  ) : (
+                                    <span className="font-normal italic text-[#7A7E85]">Selecciona los ejercicios realizados abajo</span>
+                                  )
                                 ) : (
                                   <>
                                     {ex.distance && `${ex.distance} km`}
@@ -963,37 +1011,141 @@ export default function AthleteDashboard() {
                               </p>
                             </div>
 
-                            {/* Actual results inputs */}
-                            <div className="mb-4">
-                              <p className="eyebrow text-[9px] mb-2 text-[#7A7E85]">Completado Real</p>
-                              <div className="grid grid-cols-3 gap-2">
-                                {(ex.type === 'strength'
-                                  ? [
-                                    { label: 'Series', field: 'actualSets', placeholder: String(ex.sets ?? ''), type: 'number' },
-                                    { label: 'Reps', field: 'actualReps', placeholder: String(ex.reps ?? ''), type: 'number' },
-                                    { label: 'Kg', field: 'actualWeight', placeholder: String(ex.weight ?? ''), type: 'number' },
-                                  ]
-                                  : [
+                            {/* Actual results */}
+                            {ex.type === 'cardio' ? (
+                              <div className="mb-4">
+                                <p className="eyebrow text-[9px] mb-2 text-[#7A7E85]">Completado Real</p>
+                                <div className="grid grid-cols-3 gap-2">
+                                  {[
                                     { label: 'Km', field: 'actualDistance', placeholder: String(ex.distance ?? ''), type: 'text' },
                                     { label: 'Min', field: 'actualDuration', placeholder: String(ex.duration ?? ''), type: 'text' },
                                     { label: 'Ritmo', field: 'actualPace', placeholder: ex.pace ?? '5:30', type: 'text' },
-                                  ]
-                                ).map(({ label, field, placeholder, type }) => (
-                                  <div key={field}>
-                                    <label className="block text-[8px] mb-1 font-semibold text-[#7A7E85] uppercase tracking-wide">
-                                      {label}
-                                    </label>
-                                    <input
-                                      type={type}
-                                      value={(log as Record<string, unknown>)[field] as string ?? ''}
-                                      onChange={e => updateLog(ex.id, field, e.target.value)}
-                                      placeholder={placeholder}
-                                      className="w-full rounded-lg px-2.5 py-1.5 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none focus:border-gray-500"
-                                    />
-                                  </div>
-                                ))}
+                                  ].map(({ label, field, placeholder, type }) => (
+                                    <div key={field}>
+                                      <label className="block text-[8px] mb-1 font-semibold text-[#7A7E85] uppercase tracking-wide">{label}</label>
+                                      <input
+                                        type={type}
+                                        value={(log as Record<string, unknown>)[field] as string ?? ''}
+                                        onChange={e => updateLog(ex.id, field, e.target.value)}
+                                        placeholder={placeholder}
+                                        className="w-full rounded-lg px-2.5 py-1.5 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none focus:border-gray-500"
+                                      />
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
+                            ) : (
+                              /* Strength library picker */
+                              <div className="mb-4">
+                                <p className="eyebrow text-[9px] mb-2 text-[#7A7E85]">Ejercicios Realizados</p>
+
+                                {/* Section tabs */}
+                                <div className="flex gap-1 mb-3">
+                                  {STRENGTH_SECTIONS.map(sect => {
+                                    const activeTab = strengthOpenRoutine[ex.id] ?? 'inferior'
+                                    const isActive = activeTab === sect.id
+                                    const selCount = Object.keys(strengthSels[ex.id] || {})
+                                      .filter(lid => strengthExercises.find(se => se.id === lid && se.routine === sect.id)).length
+                                    return (
+                                      <button
+                                        key={sect.id}
+                                        type="button"
+                                        onClick={() => setStrengthOpenRoutine(prev => ({ ...prev, [ex.id]: sect.id }))}
+                                        className="flex-1 px-2 py-1.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer"
+                                        style={{
+                                          background: isActive ? '#1C1F23' : '#F5F5F6',
+                                          color: isActive ? '#A8FF00' : '#4A4F57',
+                                          border: `1px solid ${isActive ? '#1C1F23' : '#E8E9EB'}`,
+                                        }}
+                                      >
+                                        {sect.label}
+                                        {selCount > 0 && (
+                                          <span className="ml-1 text-[8px] font-black px-1 rounded-full" style={{ background: '#A8FF00', color: '#1C1F23' }}>
+                                            {selCount}
+                                          </span>
+                                        )}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+
+                                {/* Exercise rows */}
+                                <div className="space-y-1.5 max-h-60 overflow-y-auto">
+                                  {strengthExercises
+                                    .filter(se => se.routine === (strengthOpenRoutine[ex.id] ?? 'inferior'))
+                                    .map(se => {
+                                      const isChecked = !!(strengthSels[ex.id]?.[se.id])
+                                      const vals = strengthSels[ex.id]?.[se.id] || { series: '', reps: '' }
+                                      return (
+                                        <div
+                                          key={se.id}
+                                          className="flex items-center gap-2 px-2.5 py-2 rounded-xl transition-all"
+                                          style={{
+                                            background: isChecked ? 'rgba(168,255,0,0.04)' : '#F9FAFB',
+                                            border: `1px solid ${isChecked ? 'rgba(168,255,0,0.25)' : '#EFEFEF'}`,
+                                          }}
+                                        >
+                                          {/* Checkbox */}
+                                          <button
+                                            type="button"
+                                            onClick={() => setStrengthSels(prev => {
+                                              const planSels = { ...(prev[ex.id] || {}) }
+                                              if (planSels[se.id]) { delete planSels[se.id] }
+                                              else { planSels[se.id] = { series: '', reps: '' } }
+                                              return { ...prev, [ex.id]: planSels }
+                                            })}
+                                            className="w-5 h-5 rounded-md flex-shrink-0 flex items-center justify-center transition-all cursor-pointer"
+                                            style={{
+                                              background: isChecked ? '#A8FF00' : 'transparent',
+                                              border: isChecked ? 'none' : '1.5px solid #D5D8DD',
+                                            }}
+                                          >
+                                            {isChecked && <span className="text-[9px] font-black text-[#1C1F23]">✓</span>}
+                                          </button>
+
+                                          {/* Name */}
+                                          <span className="text-xs text-gray-700 flex-1 min-w-0 truncate">{se.name}</span>
+
+                                          {/* Series × Reps inputs when checked */}
+                                          {isChecked && (
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                              <input
+                                                type="number"
+                                                min="1"
+                                                value={vals.series}
+                                                onChange={e => setStrengthSels(prev => ({
+                                                  ...prev,
+                                                  [ex.id]: { ...(prev[ex.id] || {}), [se.id]: { ...vals, series: e.target.value } }
+                                                }))}
+                                                placeholder={se.series ? String(se.series) : 'S'}
+                                                className="w-10 rounded-lg px-1.5 py-1 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none focus:border-gray-500 text-center"
+                                              />
+                                              <span className="text-[10px] text-gray-400 font-bold">×</span>
+                                              <input
+                                                type="text"
+                                                value={vals.reps}
+                                                onChange={e => setStrengthSels(prev => ({
+                                                  ...prev,
+                                                  [ex.id]: { ...(prev[ex.id] || {}), [se.id]: { ...vals, reps: e.target.value } }
+                                                }))}
+                                                placeholder={se.reps || 'R'}
+                                                className="w-14 rounded-lg px-1.5 py-1 text-xs text-gray-900 bg-white border border-[#D5D8DD] outline-none focus:border-gray-500 text-center"
+                                              />
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
+                                </div>
+
+                                {/* Summary count */}
+                                {Object.keys(strengthSels[ex.id] || {}).length > 0 && (
+                                  <p className="mt-2 text-[10px] text-[#7A7E85]">
+                                    {Object.keys(strengthSels[ex.id]).length} ejercicio(s) registrado(s)
+                                  </p>
+                                )}
+                              </div>
+                            )}
 
                             {/* RPE Selector */}
                             <div>
