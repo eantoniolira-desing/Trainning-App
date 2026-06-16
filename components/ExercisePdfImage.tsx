@@ -7,6 +7,7 @@ interface ExercisePdfImageProps {
   pdfFile: string
   page: number
   position: 'top' | 'bottom' | 'single'
+  cover?: boolean
 }
 
 const pdfCache = new Map<string, PDFDocumentProxy>()
@@ -29,7 +30,7 @@ const CROP: Record<string, { y: number; h: number }> = {
   single: { y: 0.19, h: 0.38 },
 }
 
-export function ExercisePdfImage({ pdfFile, page, position }: ExercisePdfImageProps) {
+export function ExercisePdfImage({ pdfFile, page, position, cover }: ExercisePdfImageProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [loaded, setLoaded] = useState(false)
@@ -82,11 +83,23 @@ export function ExercisePdfImage({ pdfFile, page, position }: ExercisePdfImagePr
 
         canvas.width = displayW * 2
         canvas.height = displayH * 2
-        canvas.style.width = `${displayW}px`
-        canvas.style.height = `${displayH}px`
 
         const ctx = canvas.getContext('2d')!
         ctx.drawImage(bitmap, 0, srcY, srcW, srcH, 0, 0, displayW * 2, displayH * 2)
+
+        if (cover) {
+          // Fill the container height; overflow horizontally (like object-fit: cover)
+          canvas.style.width = 'auto'
+          canvas.style.height = '100%'
+          canvas.style.position = 'absolute'
+          canvas.style.top = '50%'
+          canvas.style.left = '50%'
+          canvas.style.transform = 'translate(-50%, -50%)'
+          canvas.style.maxWidth = 'none'
+        } else {
+          canvas.style.width = `${displayW}px`
+          canvas.style.height = `${displayH}px`
+        }
 
         setLoaded(true)
       } catch {
@@ -103,12 +116,13 @@ export function ExercisePdfImage({ pdfFile, page, position }: ExercisePdfImagePr
       ref={containerRef}
       style={{
         position: 'relative',
-        background: '#F5F5F6',
+        background: '#2A2D35',
         overflow: 'hidden',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        minHeight: loaded ? undefined : 160,
+        height: cover ? '100%' : undefined,
+        minHeight: (!loaded && !cover) ? 160 : undefined,
       }}
     >
       {!loaded && !error && (
@@ -120,7 +134,7 @@ export function ExercisePdfImage({ pdfFile, page, position }: ExercisePdfImagePr
             className="animate-spin"
             style={{
               width: 20, height: 20,
-              border: '2px solid #E8E9EB',
+              border: '2px solid rgba(255,255,255,0.1)',
               borderTopColor: '#A8FF00',
               borderRadius: '50%',
             }}
@@ -130,14 +144,14 @@ export function ExercisePdfImage({ pdfFile, page, position }: ExercisePdfImagePr
       {error && (
         <div style={{
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          minHeight: 160, fontSize: '2rem', color: '#D5D8DD',
+          minHeight: 120, fontSize: '1.5rem', color: 'rgba(255,255,255,0.2)',
         }}>
-          🏋️
+          —
         </div>
       )}
       <canvas
         ref={canvasRef}
-        style={{ display: loaded ? 'block' : 'none', width: '100%' }}
+        style={{ display: loaded ? 'block' : 'none', width: cover ? undefined : '100%' }}
       />
     </div>
   )

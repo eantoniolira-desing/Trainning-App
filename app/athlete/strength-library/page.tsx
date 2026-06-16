@@ -156,15 +156,16 @@ export default function AthleteStrengthLibrary() {
                     </div>
                   </div>
 
-                  {/* Image side */}
+                  {/* Image side — cover fill */}
                   <div
-                    className="flex-shrink-0 overflow-hidden"
-                    style={{ width: 148, background: '#2A2D35' }}
+                    className="flex-shrink-0"
+                    style={{ width: 148, alignSelf: 'stretch', position: 'relative', overflow: 'hidden' }}
                   >
                     <ExercisePdfImage
                       pdfFile={sect.preview.pdfFile}
                       page={sect.preview.pdfPage}
                       position={sect.preview.position}
+                      cover
                     />
                   </div>
                 </button>
