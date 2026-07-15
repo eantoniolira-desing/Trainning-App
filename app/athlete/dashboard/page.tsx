@@ -420,7 +420,7 @@ export default function AthleteDashboard() {
     const allPlans = getPlans()
     const updatedPlansList = allPlans.map(p => p.id === plan.id ? updatedPlan : p)
     savePlans(updatedPlansList)
-    upsertSinglePlan(updatedPlan).catch(e => console.error('[session save]', e))
+    upsertSinglePlan(updatedPlan).then(() => console.log('[Athlete] upsertSinglePlan OK', updatedPlan.id)).catch(e => console.error('[Athlete] upsertSinglePlan FAILED:', e))
     setPlan(updatedPlan)
     
     // Update active session locally

@@ -57,10 +57,15 @@ export default function AthleteProfilePage() {
 
     // 2. Refresh from Supabase in background — update silently when ready
     fetchPlansFromSupabase(id).then(remote => {
+      console.log('[Coach] Supabase plans received:', remote.length, remote.map(p => ({
+        id: p.id, name: p.name,
+        done: p.weeks.flatMap(w => w.days).filter(d => d.feedback?.completed).length,
+        total: p.weeks.flatMap(w => w.days).length,
+      })))
       if (remote.length === 0) return
       const sorted = remote.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       setPlans(sorted)
-    }).catch(() => {})
+    }).catch(e => console.error('[Coach] fetchPlansFromSupabase failed:', e))
   }
 
   const handleSendReply = (planId: string, dayId: string, dayLabel: string) => {
