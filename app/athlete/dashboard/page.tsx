@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, getNotifications, saveNotifications, addReplyToSession } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, savePlans, upsertSinglePlan, getStrengthLibrary, getNotifications, saveNotifications, addReplyToSession } from '@/lib/db'
 import type { Athlete, TrainingPlan, TrainingDay, ExerciseLog, StrengthExercise, NotificationEntry, CommentReply } from '@/lib/types'
 
 function RpeButton({ n, active, onClick }: { n: number; active: boolean; onClick: () => void }) {
@@ -416,10 +416,11 @@ export default function AthleteDashboard() {
 
     const updatedPlan = { ...plan, weeks: updatedWeeks }
     
-    // Save to localStorage
+    // Save to localStorage + Supabase
     const allPlans = getPlans()
     const updatedPlansList = allPlans.map(p => p.id === plan.id ? updatedPlan : p)
     savePlans(updatedPlansList)
+    upsertSinglePlan(updatedPlan).catch(e => console.error('[session save]', e))
     setPlan(updatedPlan)
     
     // Update active session locally
@@ -486,6 +487,7 @@ export default function AthleteDashboard() {
     const updatedPlan: TrainingPlan = { ...targetPlan, weeks: updatedWeeks }
     const all = getPlans()
     savePlans(all.map(p => p.id === targetPlan.id ? updatedPlan : p))
+    upsertSinglePlan(updatedPlan).catch(e => console.error('[markWeek]', e))
     setAllPlans(prev => prev.map(p => p.id === targetPlan.id ? updatedPlan : p))
     if (plan?.id === targetPlan.id) setPlan(updatedPlan)
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('athlete-session-saved'))
@@ -522,6 +524,7 @@ export default function AthleteDashboard() {
     const all = getPlans()
     const updatedList = all.map(p => p.id === targetPlan.id ? updatedPlan : p)
     savePlans(updatedList)
+    upsertSinglePlan(updatedPlan).catch(e => console.error('[historyDay]', e))
     setAllPlans(prev => prev.map(p => p.id === targetPlan.id ? updatedPlan : p))
     if (plan?.id === targetPlan.id) setPlan(updatedPlan)
     const updatedDay = updatedWeeks.flatMap(w => w.days).find(d => d.id === day.id)!

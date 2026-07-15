@@ -712,7 +712,21 @@ export function getPlans(): TrainingPlan[] {
 export function savePlans(plans: TrainingPlan[]) {
   if (!isBrowser()) return;
   localStorage.setItem(KEY_PLANS, JSON.stringify(plans));
-  pushPlansToSupabase(plans).catch(() => {});
+  pushPlansToSupabase(plans).catch(e => console.error('[savePlans]', e));
+}
+
+export async function upsertSinglePlan(plan: TrainingPlan): Promise<void> {
+  if (!isBrowser()) return;
+  const { error } = await supabase.from('training_plans').upsert({
+    id: plan.id,
+    name: plan.name,
+    athlete_id: plan.athleteId,
+    start_date: plan.startDate,
+    end_date: plan.endDate,
+    weeks: plan.weeks,
+    created_at: plan.createdAt,
+  });
+  if (error) console.error('[upsertSinglePlan]', error.message);
 }
 
 export async function fetchPlansFromSupabase(athleteId: string): Promise<TrainingPlan[]> {
@@ -1227,11 +1241,10 @@ async function pushPlansToSupabase(plans: TrainingPlan[]) {
     start_date: p.startDate, end_date: p.endDate,
     weeks: p.weeks, created_at: p.createdAt,
   }));
-  if (rows.length > 0) await supabase.from('training_plans').upsert(rows);
-  const ids = plans.map(p => p.id);
-  const { data: existing } = await supabase.from('training_plans').select('id');
-  const toDelete = (existing || []).map((r: { id: string }) => r.id).filter((id: string) => !ids.includes(id));
-  if (toDelete.length > 0) await supabase.from('training_plans').delete().in('id', toDelete);
+  if (rows.length > 0) {
+    const { error } = await supabase.from('training_plans').upsert(rows);
+    if (error) console.error('[Supabase] pushPlansToSupabase error:', error.message);
+  }
 }
 
 async function pushCoachProfileToSupabase(profile: CoachProfile) {
