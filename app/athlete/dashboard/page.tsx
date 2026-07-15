@@ -453,25 +453,37 @@ export default function AthleteDashboard() {
 
   const handleMarkWeekComplete = (targetPlan: TrainingPlan, weekId: string, markComplete: boolean) => {
     if (!athlete) return
+    const today = new Date().toISOString().split('T')[0]
     const updatedWeeks = targetPlan.weeks.map(week => {
       if (week.id !== weekId) return week
       return {
         ...week,
-        days: week.days.map(d => ({
-          ...d,
-          feedback: markComplete
-            ? {
+        days: week.days.map(d => {
+          if (markComplete) {
+            return {
+              ...d,
+              feedback: {
                 completed: true,
-                feelingRating: d.feedback?.feelingRating || 3,
-                feelingEmoji: d.feedback?.feelingEmoji || '😐',
-                comments: d.feedback?.comments || '',
-                loggedAt: d.feedback?.loggedAt || new Date().toISOString().split('T')[0],
+                feelingRating: d.feedback?.feelingRating ?? 3,
+                feelingEmoji: d.feedback?.feelingEmoji ?? '😐',
+                comments: d.feedback?.comments,
+                loggedAt: d.feedback?.loggedAt ?? today,
+                replies: d.feedback?.replies,
               }
-            : { ...d.feedback, completed: false }
-        }))
+            }
+          }
+          if (!d.feedback) return d
+          return {
+            ...d,
+            feedback: {
+              ...d.feedback,
+              completed: false,
+            }
+          }
+        })
       }
-    })
-    const updatedPlan = { ...targetPlan, weeks: updatedWeeks }
+    }) as TrainingPlan['weeks']
+    const updatedPlan: TrainingPlan = { ...targetPlan, weeks: updatedWeeks }
     const all = getPlans()
     savePlans(all.map(p => p.id === targetPlan.id ? updatedPlan : p))
     setAllPlans(prev => prev.map(p => p.id === targetPlan.id ? updatedPlan : p))
