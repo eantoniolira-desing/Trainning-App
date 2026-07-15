@@ -33,6 +33,9 @@ export default function AthleteProfilePage() {
   // Plan expand/collapse
   const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set())
 
+  // Buzón collapse
+  const [buzonCollapsed, setBuzonCollapsed] = useState(false)
+
   // Strength library lookup states
   const [strengthExercises, setStrengthExercises] = useState<StrengthExercise[]>([])
   const [showGuide, setShowGuide] = useState<StrengthExercise | null>(null)
@@ -587,9 +590,13 @@ export default function AthleteProfilePage() {
       </div>
 
       {/* Buzón de Sesiones / Comentarios de Retroalimentación */}
-      <div className="bg-white border border-[#E8E9EB] rounded-2xl p-6 shadow-sm space-y-4 animate-fade-up delay-2 mb-8 mt-6">
-        <div className="flex items-center justify-between pb-3 border-b border-[#F5F5F6]">
+      <div className="bg-white border border-[#E8E9EB] rounded-2xl shadow-sm animate-fade-up delay-2 mb-8 mt-6 overflow-hidden">
+        <div
+          className="flex items-center justify-between px-6 py-4 cursor-pointer select-none border-b border-[#F5F5F6]"
+          onClick={() => setBuzonCollapsed(v => !v)}
+        >
           <h3 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+            <span className="text-gray-400 text-xs">{buzonCollapsed ? '▸' : '▾'}</span>
             <span>📬</span> Buzón de Sesiones y Retroalimentación del Atleta
           </h3>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F5F5F6] text-[#4A4F57] uppercase tracking-wider">
@@ -597,8 +604,9 @@ export default function AthleteProfilePage() {
           </span>
         </div>
 
-        {completedSessions.length === 0 ? (
-          <p className="text-xs text-gray-400 py-6 italic text-center">
+        {!buzonCollapsed && (
+          completedSessions.length === 0 ? (
+          <p className="text-xs text-gray-400 py-6 italic text-center px-6 pb-6">
             El atleta no ha registrado ninguna sesión evaluada aún.
           </p>
         ) : (
@@ -741,7 +749,7 @@ export default function AthleteProfilePage() {
               )
             })}
           </div>
-        )}
+        ))}
       </div>
 
       {/* Plans Section */}
@@ -772,8 +780,11 @@ export default function AthleteProfilePage() {
             {plans.map(plan => {
               const isActive = new Date(plan.endDate) >= today
               const isExpanded = expandedPlanIds.has(plan.id)
-              const totalDays = plan.weeks.reduce((s, w) => s + w.days.length, 0)
-              const totalExs = plan.weeks.flatMap(w => w.days.flatMap(d => d.exercises)).length
+              const allDays = plan.weeks.flatMap(w => w.days)
+              const totalDays = allDays.length
+              const doneDays = allDays.filter(d => d.feedback?.completed).length
+              const pct = totalDays > 0 ? Math.round(doneDays / totalDays * 100) : 0
+              const totalExs = allDays.flatMap(d => d.exercises).length
 
               return (
                 <div
@@ -801,7 +812,22 @@ export default function AthleteProfilePage() {
                       )}
                       <span className="text-[10px] text-gray-400 font-medium">{plan.weeks.length} sem · {totalDays} días · {totalExs} ejercicios</span>
                     </div>
-                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-3" onClick={e => e.stopPropagation()}>
+                      {/* Progress ring */}
+                      <div className="relative w-9 h-9 flex-shrink-0 cursor-default" title={`${doneDays}/${totalDays} días completados`}>
+                        <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                          <circle cx="18" cy="18" r="15" fill="none" stroke="#F0F0F1" strokeWidth="3" />
+                          <circle cx="18" cy="18" r="15" fill="none"
+                            stroke={pct === 100 ? '#047857' : isActive ? '#A8FF00' : '#D1D5DB'}
+                            strokeWidth="3"
+                            strokeDasharray={`${pct * 0.942} 94.2`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black text-gray-700">
+                          {pct === 100 ? '✓' : `${pct}%`}
+                        </span>
+                      </div>
                       <Link
                         href={`/coach/athletes/${id}/plan/${plan.id}/edit`}
                         className="px-2.5 py-1 rounded-md text-[10px] font-bold border border-[#D5D8DD] hover:bg-[#F5F5F6] transition-colors bg-white"
@@ -838,17 +864,29 @@ export default function AthleteProfilePage() {
                           
                           {/* Calendar Grid of 7 days */}
                           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-3">
-                            {sortedDays.map(day => (
-                              <div 
-                                key={day.id} 
-                                className="bg-[#F9FAFB] border border-[#E8E9EB] rounded-xl p-3 flex flex-col justify-between shadow-sm min-h-[140px]"
+                            {sortedDays.map(day => {
+                              const fb = day.feedback
+                              const isDone = !!fb?.completed
+                              return (
+                              <div
+                                key={day.id}
+                                className="border rounded-xl p-3 flex flex-col justify-between shadow-sm min-h-[140px]"
+                                style={{
+                                  background: isDone ? 'rgba(236,253,245,0.5)' : '#F9FAFB',
+                                  borderColor: isDone ? '#A7F3D0' : '#E8E9EB',
+                                }}
                               >
                                 <div>
-                                  {/* Day label */}
+                                  {/* Day label + completion badge */}
                                   <div className="flex items-center justify-between pb-1.5 border-b border-[#E8E9EB] mb-2">
                                     <p className="text-xs font-bold text-gray-900 truncate tracking-tight">{day.dayLabel}</p>
+                                    {isDone && (
+                                      <span className="text-base flex-shrink-0 ml-1" title={`Completado ${fb?.loggedAt || ''}`}>
+                                        {fb?.feelingEmoji || '✓'}
+                                      </span>
+                                    )}
                                   </div>
-                                  
+
                                   {/* Exercises detail list */}
                                   {day.exercises.length === 0 ? (
                                     <p className="text-[10px] text-gray-400 italic">Descanso</p>
@@ -874,32 +912,56 @@ export default function AthleteProfilePage() {
                                                 </button>
                                               )}
                                             </div>
-                                          <p className="text-gray-500 mt-0.5 text-[9px] font-semibold">
-                                            {ex.type === 'strength' ? (
-                                              <>
-                                                {ex.sets}x{ex.reps}
-                                                {ex.weight && ` · ${ex.weight}kg`}
-                                              </>
-                                            ) : (
-                                              <>
-                                                {ex.distance && `${ex.distance}km`}
-                                                {ex.duration && ` · ${ex.duration}'`}
-                                                {ex.pace && ` · ${ex.pace}`}
-                                              </>
-                                            )}
-                                          </p>
-                                          {ex.notes && (
-                                            <p className="text-[8.5px] text-[#7A7E85] italic mt-0.5 border-t border-gray-100 pt-0.5">
-                                              {ex.notes}
+                                            <p className="text-gray-500 mt-0.5 text-[9px] font-semibold">
+                                              {ex.type === 'strength' ? (
+                                                <>
+                                                  {ex.sets}x{ex.reps}
+                                                  {ex.weight && ` · ${ex.weight}kg`}
+                                                </>
+                                              ) : (
+                                                <>
+                                                  {ex.distance && `${ex.distance}km`}
+                                                  {ex.duration && ` · ${ex.duration}'`}
+                                                  {ex.pace && ` · ${ex.pace}`}
+                                                </>
+                                              )}
                                             </p>
-                                          )}
-                                        </div>
-                                      )})}
+                                            {ex.notes && (
+                                              <p className="text-[8.5px] text-[#7A7E85] italic mt-0.5 border-t border-gray-100 pt-0.5">
+                                                {ex.notes}
+                                              </p>
+                                            )}
+                                          </div>
+                                        )
+                                      })}
                                     </div>
                                   )}
                                 </div>
+
+                                {/* Athlete feedback */}
+                                {isDone && (
+                                  <div className="mt-2.5 pt-2 border-t border-[#D1FAE5] space-y-1">
+                                    {fb?.feelingRating > 0 && (
+                                      <div className="flex gap-0.5">
+                                        {[1,2,3,4,5].map(n => (
+                                          <div key={n} className="flex-1 h-1 rounded-full"
+                                            style={{ background: n <= fb.feelingRating ? '#047857' : '#D1FAE5' }} />
+                                        ))}
+                                      </div>
+                                    )}
+                                    {fb?.comments && (
+                                      <p className="text-[9px] text-[#047857] italic leading-snug">
+                                        "{fb.comments}"
+                                      </p>
+                                    )}
+                                    {fb?.loggedAt && (
+                                      <p className="text-[8px] text-gray-400">{new Date(fb.loggedAt + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
-                            ))}
+                            )})}
+
                           </div>
                         </div>
                       )
