@@ -54,8 +54,10 @@ export default function AthleteDashboard() {
 
   const [athlete, setAthlete] = useState<Athlete | null>(null)
   const [plan, setPlan] = useState<TrainingPlan | null>(null)
+  const [allPlans, setAllPlans] = useState<TrainingPlan[]>([])
   const [session, setSession] = useState<TrainingDay | null>(null)
   const [mounted, setMounted] = useState(false)
+  const [expandedHistoryPlanIds, setExpandedHistoryPlanIds] = useState<Set<string>>(new Set())
   const [photo, setPhoto] = useState<string | null>(null)
   const photoRef = useRef<HTMLInputElement>(null)
   const loggerRef = useRef<HTMLDivElement>(null)
@@ -117,13 +119,13 @@ export default function AthleteDashboard() {
     const currentAthlete = getAthletes().find(a => a.id === athleteId)
     if (currentAthlete) setAthlete(currentAthlete)
 
-    const athletePlans = getPlans().filter(p => p.athleteId === athleteId)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const active = athletePlans.find(p => new Date(p.endDate) >= today) || athletePlans[athletePlans.length - 1]
-    if (active) {
-      setPlan(active)
-    }
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const athletePlans = getPlans()
+      .filter(p => p.athleteId === athleteId)
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+    setAllPlans(athletePlans)
+    const active = athletePlans.find(p => new Date(p.endDate) >= today) || athletePlans[0]
+    if (active) setPlan(active)
   }
 
   const handleSendAthleteReply = () => {
@@ -225,13 +227,14 @@ export default function AthleteDashboard() {
       setPhoto(localStorage.getItem(`athlete-photo-${athleteId}`))
     } catch {}
 
-    // Load plans & current active plan
-    const athletePlans = getPlans().filter(p => p.athleteId === athleteId)
-    // Find active or latest
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const active = athletePlans.find(p => new Date(p.endDate) >= today) || athletePlans[athletePlans.length - 1]
-    
+    // Load all plans + active plan
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const athletePlans = getPlans()
+      .filter(p => p.athleteId === athleteId)
+      .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+    setAllPlans(athletePlans)
+    const active = athletePlans.find(p => new Date(p.endDate) >= today) || athletePlans[0]
+
     if (active) {
       setPlan(active)
       // Auto-load first incomplete session, or just first day
@@ -1396,6 +1399,145 @@ export default function AthleteDashboard() {
         </div>
 
       </div>
+
+      {/* ── HISTORIAL DE PLANES ── */}
+      {allPlans.length > 0 && (
+        <div className="mt-10">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="eyebrow text-[#7A7E85]">Tu progreso</p>
+              <h2 className="text-xl font-bold text-gray-900" style={{ letterSpacing: '-0.02em' }}>
+                Historial de Planes
+              </h2>
+            </div>
+            <span className="text-xs font-semibold text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
+              {allPlans.length} plan{allPlans.length !== 1 ? 'es' : ''}
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {allPlans.map(p => {
+              const todayTs = new Date(); todayTs.setHours(0,0,0,0)
+              const isActive = new Date(p.endDate) >= todayTs
+              const isExpanded = expandedHistoryPlanIds.has(p.id)
+              const allDays = p.weeks.flatMap(w => w.days)
+              const doneDays = allDays.filter(d => d.feedback?.completed).length
+              const pct = allDays.length > 0 ? Math.round(doneDays / allDays.length * 100) : 0
+
+              return (
+                <div key={p.id} className="bg-white rounded-2xl border border-[#E8E9EB] shadow-sm overflow-hidden">
+
+                  {/* Plan header */}
+                  <div
+                    className="flex items-center justify-between px-5 py-4 cursor-pointer select-none"
+                    onClick={() => setExpandedHistoryPlanIds(prev => {
+                      const next = new Set(prev)
+                      if (next.has(p.id)) next.delete(p.id)
+                      else next.add(p.id)
+                      return next
+                    })}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-gray-400">{isExpanded ? '▾' : '▸'}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-gray-900 text-sm">{p.name}</h3>
+                          {isActive && (
+                            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                              style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
+                              Activo
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-0.5">
+                          {new Date(p.startDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {' → '}
+                          {new Date(p.endDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          {' · '}{p.weeks.length} sem · {allDays.length} días
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Progress */}
+                    <div className="flex items-center gap-4 flex-shrink-0">
+                      <div className="text-right">
+                        <p className="text-sm font-black text-gray-900">{pct}%</p>
+                        <p className="text-[9px] text-gray-400 font-semibold">{doneDays}/{allDays.length} días</p>
+                      </div>
+                      {/* Progress ring */}
+                      <div className="relative w-9 h-9 flex-shrink-0">
+                        <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
+                          <circle cx="18" cy="18" r="15" fill="none" stroke="#F0F0F1" strokeWidth="3" />
+                          <circle cx="18" cy="18" r="15" fill="none"
+                            stroke={pct === 100 ? '#047857' : isActive ? '#A8FF00' : '#D1D5DB'}
+                            strokeWidth="3"
+                            strokeDasharray={`${pct * 0.942} 94.2`}
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                        <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black text-gray-700">
+                          {pct === 100 ? '✓' : `${pct}%`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Expanded: weeks overview */}
+                  {isExpanded && (
+                    <div className="border-t border-[#F5F5F6] px-5 pb-5 pt-4 space-y-5">
+                      {p.weeks.map(week => {
+                        const weekDays = week.days
+                        const doneinWeek = weekDays.filter(d => d.feedback?.completed).length
+                        return (
+                          <div key={week.id}>
+                            <div className="flex items-center justify-between mb-2">
+                              <p className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
+                                Semana {week.weekNumber}
+                              </p>
+                              <span className="text-[10px] text-gray-400 font-semibold">{doneinWeek}/{weekDays.length} ✓</span>
+                            </div>
+                            <div className="grid grid-cols-7 gap-1.5">
+                              {weekDays.map(day => {
+                                const done = !!day.feedback?.completed
+                                const rest = day.exercises.length === 0
+                                const parts = day.dayLabel.split(' ')
+                                return (
+                                  <div key={day.id}
+                                    className="rounded-xl border text-center py-2.5 px-1"
+                                    style={{
+                                      background: done ? 'rgba(4,120,87,0.05)' : rest ? '#FAFAFA' : '#F9FAFB',
+                                      borderColor: done ? '#A7F3D0' : '#E8E9EB',
+                                    }}>
+                                    <p className="text-[8px] font-bold text-gray-400 uppercase truncate">{parts[0]?.slice(0,3)}</p>
+                                    <p className="text-sm font-black text-gray-800 leading-none my-1">{parts[1] || ''}</p>
+                                    {done ? (
+                                      <span className="text-sm leading-none">{day.feedback?.feelingEmoji || '✓'}</span>
+                                    ) : rest ? (
+                                      <span className="text-xs text-gray-300">🌙</span>
+                                    ) : (
+                                      <div className="flex justify-center gap-0.5 mt-0.5">
+                                        {day.exercises.slice(0, 3).map((ex, i) => (
+                                          <div key={i} className="w-1 h-1 rounded-full"
+                                            style={{ background: ex.type === 'cardio' ? '#047857' : '#6366F1' }} />
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* STRENGTH GUIDE TECHNIQUE MODAL */}
       {showGuide && (
