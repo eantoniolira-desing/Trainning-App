@@ -7,7 +7,7 @@ import { getAthletes, getPlans, savePlans } from '@/lib/db'
 import { Athlete, TrainingPlan, TrainingDay } from '@/lib/types'
 import type { ParsedSession } from '@/lib/parsers/excel-parser'
 
-type Method = 'manual' | 'excel' | 'word'
+type Method = 'manual' | 'excel' | 'word' | 'text'
 type ExType = 'strength' | 'cardio'
 
 interface ExForm {
@@ -74,6 +74,10 @@ export default function NewPlanPage() {
   const [fileError, setFileError] = useState('')
   const [wordRawText, setWordRawText] = useState('')
   const [fileName, setFileName] = useState('')
+
+  // AI text paste state
+  const [pasteText, setPasteText] = useState('')
+  const [aiWeeks, setAiWeeks] = useState<TrainingPlan['weeks'] | null>(null)
 
   useEffect(() => {
     const all = getAthletes()
@@ -151,29 +155,66 @@ export default function NewPlanPage() {
     }
   }
 
+  async function handleAiParse() {
+    if (!pasteText.trim()) return
+    setFileStatus('loading')
+    setFileError('')
+    const tempId = 'plan-' + Date.now()
+    try {
+      const res = await fetch('/api/parse-plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: pasteText, planId: tempId }),
+      })
+      const data = await res.json()
+      if (!res.ok || data.error) throw new Error(data.error || 'Error al procesar')
+      const p = data.plan
+      if (p.name && !planName) setPlanName(p.name)
+      if (p.startDate && !startDate) setStartDate(p.startDate)
+      if (p.endDate && !endDate) setEndDate(p.endDate)
+      if (p.weeks?.length) {
+        setAiWeeks(p.weeks)
+        setFileStatus('done')
+      } else {
+        throw new Error('La IA no detectó semanas. Revisa el texto.')
+      }
+    } catch (e: unknown) {
+      setFileError(e instanceof Error ? e.message : 'Error desconocido')
+      setFileStatus('error')
+    }
+  }
+
   const handleSave = () => {
     if (!planName || !startDate || !endDate) return
 
-    // Map sessions to db models
-    const mappedDays = sessions.map((session, sIdx) => ({
-      id: session.id || Math.random().toString(36).slice(2),
-      date: session.date || new Date().toISOString().split('T')[0],
-      dayLabel: session.dayLabel || `Día ${sIdx + 1}`,
-      exercises: session.exercises.map(e => ({
-        id: e.id || Math.random().toString(36).slice(2),
-        type: e.type,
-        name: e.name || 'Ejercicio sin nombre',
-        sets: e.sets ? parseInt(e.sets) : undefined,
-        reps: e.reps ? parseInt(e.reps) : undefined,
-        weight: e.weight ? parseFloat(e.weight) : undefined,
-        rest: e.rest ? parseInt(e.rest) : undefined,
-        distance: e.distance ? parseFloat(e.distance) : undefined,
-        duration: e.duration ? parseFloat(e.duration) : undefined,
-        pace: e.pace || undefined,
-        heartRateZone: e.heartRateZone ? parseInt(e.heartRateZone) : undefined,
-        notes: e.notes || undefined,
+    let weeks: TrainingPlan['weeks']
+
+    if (method === 'text' && aiWeeks) {
+      // Use AI-parsed weeks directly
+      weeks = aiWeeks
+    } else {
+      // Map sessions to a single week (manual / file methods)
+      const mappedDays = sessions.map((session, sIdx) => ({
+        id: session.id || Math.random().toString(36).slice(2),
+        date: session.date || new Date().toISOString().split('T')[0],
+        dayLabel: session.dayLabel || `Día ${sIdx + 1}`,
+        exercises: session.exercises.map(e => ({
+          id: e.id || Math.random().toString(36).slice(2),
+          type: e.type,
+          name: e.name || 'Ejercicio sin nombre',
+          sets: e.sets ? parseInt(e.sets) : undefined,
+          reps: e.reps ? parseInt(e.reps) : undefined,
+          weight: e.weight ? parseFloat(e.weight) : undefined,
+          rest: e.rest ? parseInt(e.rest) : undefined,
+          distance: e.distance ? parseFloat(e.distance) : undefined,
+          duration: e.duration ? parseFloat(e.duration) : undefined,
+          pace: e.pace || undefined,
+          heartRateZone: e.heartRateZone ? parseInt(e.heartRateZone) : undefined,
+          notes: e.notes || undefined,
+        }))
       }))
-    }))
+      weeks = [{ id: 'week-' + Math.random().toString(36).slice(2), weekNumber: 1, days: mappedDays }]
+    }
 
     const newPlan: TrainingPlan = {
       id: 'plan-' + Date.now().toString(),
@@ -182,13 +223,7 @@ export default function NewPlanPage() {
       startDate: startDate,
       endDate: endDate,
       createdAt: new Date().toISOString().split('T')[0],
-      weeks: [
-        {
-          id: 'week-' + Math.random().toString(36).slice(2),
-          weekNumber: 1,
-          days: mappedDays
-        }
-      ]
+      weeks,
     }
 
     const currentPlans = getPlans()
@@ -246,14 +281,15 @@ export default function NewPlanPage() {
       {/* Method selector */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
         <h2 className="text-base font-semibold text-gray-800 mb-4">¿Cómo cargar los ejercicios?</h2>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {([
+            { id: 'text',   icon: '🤖', label: 'Pegar texto (IA)', desc: 'Pega el plan en cualquier formato' },
             { id: 'manual', icon: '✏️', label: 'Manual', desc: 'Ingresa ejercicio por ejercicio' },
-            { id: 'excel', icon: '📊', label: 'Excel / CSV', desc: '.xlsx, .xls, .csv' },
-            { id: 'word', icon: '📝', label: 'Word', desc: '.docx, .doc' },
+            { id: 'excel',  icon: '📊', label: 'Excel / CSV', desc: '.xlsx, .xls, .csv' },
+            { id: 'word',   icon: '📝', label: 'Word', desc: '.docx, .doc' },
           ] as const).map(opt => (
-            <button key={opt.id} onClick={() => { setMethod(opt.id); setFileStatus('idle'); setFileError(''); setWordRawText('') }}
-              className={`p-4 rounded-xl border-2 text-left transition-all ${method === opt.id ? 'border-[#7A7E85] bg-[#F5F5F6]' : 'border-gray-200 hover:border-[#D5D8DD]'}`}>
+            <button key={opt.id} onClick={() => { setMethod(opt.id); setFileStatus('idle'); setFileError(''); setWordRawText(''); setAiWeeks(null) }}
+              className={`p-4 rounded-xl border-2 text-left transition-all ${method === opt.id ? 'border-[#1C1F23] bg-[#F5F5F6]' : 'border-gray-200 hover:border-[#D5D8DD]'}`}>
               <div className="text-2xl mb-2">{opt.icon}</div>
               <p className="font-semibold text-gray-900 text-sm">{opt.label}</p>
               <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
@@ -261,6 +297,71 @@ export default function NewPlanPage() {
           ))}
         </div>
       </div>
+
+      {/* AI text paste panel */}
+      {method === 'text' && fileStatus === 'idle' && (
+        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
+          <h3 className="font-semibold text-gray-800 mb-1">Pega el plan en texto libre</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            Copia el contenido de tu Word, email o cualquier documento. La IA lo convertirá al formato correcto automáticamente.
+          </p>
+          <textarea
+            value={pasteText}
+            onChange={e => setPasteText(e.target.value)}
+            rows={14}
+            placeholder={"Semana 1\nLunes – Fuerza Recovery + Natación\nMartes – 60' Z1 (5:45-5:55 min/km)\n..."}
+            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1C1F23] resize-y bg-gray-50 text-gray-800"
+          />
+          <button
+            onClick={handleAiParse}
+            disabled={!pasteText.trim()}
+            className="mt-4 w-full py-3 rounded-xl text-sm font-bold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: '#1C1F23' }}
+          >
+            🤖 Interpretar con IA
+          </button>
+        </div>
+      )}
+
+      {/* AI parse result preview */}
+      {method === 'text' && fileStatus === 'done' && aiWeeks && (
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-emerald-600 text-xl">✅</span>
+            <div>
+              <p className="text-emerald-700 font-semibold text-sm">Plan interpretado correctamente</p>
+              <p className="text-emerald-600 text-xs">
+                {aiWeeks.length} semana(s) · {aiWeeks.reduce((s, w) => s + w.days.length, 0)} día(s) · {aiWeeks.reduce((s, w) => s + w.days.reduce((ss, d) => ss + d.exercises.length, 0), 0)} ejercicio(s)
+              </p>
+            </div>
+            <button
+              onClick={() => { setFileStatus('idle'); setAiWeeks(null) }}
+              className="ml-auto text-xs text-emerald-600 hover:text-emerald-800 underline"
+            >
+              Reintentar
+            </button>
+          </div>
+          <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+            {aiWeeks.map(week => (
+              <div key={week.id}>
+                <p className="text-xs font-bold text-gray-700 mb-1">Semana {week.weekNumber}</p>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-1.5">
+                  {week.days.map(day => (
+                    <div key={day.id} className="bg-white border border-emerald-100 rounded-lg p-2">
+                      <p className="text-[9px] font-bold text-gray-600 truncate mb-1">{day.dayLabel}</p>
+                      {day.exercises.map((ex, i) => (
+                        <p key={i} className="text-[9px] text-gray-500 truncate">
+                          {ex.type === 'strength' ? '💪' : '🏃'} {ex.name}
+                        </p>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Excel upload panel */}
       {method === 'excel' && fileStatus === 'idle' && (
@@ -358,8 +459,8 @@ export default function NewPlanPage() {
         </div>
       )}
 
-      {/* Sessions editor — shown for manual always, and after import for file methods */}
-      {(method === 'manual' || fileStatus === 'done') && (
+      {/* Sessions editor — shown for manual/excel/word only (text uses AI weeks preview) */}
+      {(method === 'manual' || ((method === 'excel' || method === 'word') && fileStatus === 'done')) && (
         <>
           <div className="space-y-4 mb-4">
             {sessions.map((session, sIdx) => (
@@ -485,16 +586,18 @@ export default function NewPlanPage() {
         </>
       )}
 
-      <div className="flex gap-3 justify-end">
-        <Link href={`/coach/athletes/${athleteId}`}
-          className="px-6 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-          Cancelar
-        </Link>
-        <button onClick={handleSave} disabled={!planName || !startDate || !endDate}
-          className="px-6 py-2 bg-[#4A4F57] text-white rounded-lg text-sm font-medium hover:bg-[#3a3f47] disabled:opacity-50 disabled:cursor-not-allowed">
-          Guardar plan
-        </button>
-      </div>
+      {(method === 'manual' || ((method === 'excel' || method === 'word') && fileStatus === 'done') || (method === 'text' && !!aiWeeks)) && (
+        <div className="flex gap-3 justify-end">
+          <Link href={`/coach/athletes/${athleteId}`}
+            className="px-6 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+            Cancelar
+          </Link>
+          <button onClick={handleSave} disabled={!planName || !startDate || !endDate}
+            className="px-6 py-2 bg-[#1C1F23] text-white rounded-lg text-sm font-medium hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed">
+            Guardar plan
+          </button>
+        </div>
+      )}
     </div>
   )
 }

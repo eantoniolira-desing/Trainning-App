@@ -27,6 +27,11 @@ export default function AthleteProfilePage() {
   // Goal states
   const [newGoalTitle, setNewGoalTitle] = useState('')
   const [newGoalDate, setNewGoalDate] = useState('')
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
+  const [editGoalForm, setEditGoalForm] = useState({ title: '', targetDate: '', result: '', notes: '' })
+
+  // Plan expand/collapse
+  const [expandedPlanIds, setExpandedPlanIds] = useState<Set<string>>(new Set())
 
   // Strength library lookup states
   const [strengthExercises, setStrengthExercises] = useState<StrengthExercise[]>([])
@@ -34,10 +39,14 @@ export default function AthleteProfilePage() {
   const [repliesTexts, setRepliesTexts] = useState<Record<string, string>>({})
 
   const loadPlans = () => {
+    const todayDate = new Date(); todayDate.setHours(0,0,0,0)
     const athletePlans = getPlans()
       .filter(p => p.athleteId === id)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     setPlans(athletePlans)
+    // Auto-expand active plan
+    const activePlan = athletePlans.find(p => new Date(p.endDate) >= todayDate)
+    if (activePlan) setExpandedPlanIds(new Set([activePlan.id]))
   }
 
   const handleSendReply = (planId: string, dayId: string, dayLabel: string) => {
@@ -162,6 +171,32 @@ export default function AthleteProfilePage() {
     const updatedList = all.map(a => a.id === id ? updatedAthlete : a)
     saveAthletes(updatedList)
     setAthlete(updatedAthlete)
+  }
+
+  const handleDeletePlan = (planId: string, planName: string) => {
+    if (!confirm(`¿Eliminar el plan "${planName}"?\n\nSe perderán todos los registros de este plan. Esta acción no se puede deshacer.`)) return
+    const updated = getPlans().filter(p => p.id !== planId)
+    savePlans(updated)
+    setPlans(updated.filter(p => p.athleteId === id).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()))
+  }
+
+  const handleStartEditGoal = (goal: import('@/lib/types').GoalEntry) => {
+    setEditingGoalId(goal.id)
+    setEditGoalForm({ title: goal.title, targetDate: goal.targetDate, result: goal.result || '', notes: goal.notes || '' })
+  }
+
+  const handleSaveEditGoal = () => {
+    if (!athlete || !editingGoalId) return
+    const updatedGoals = (athlete.goals || []).map(g =>
+      g.id === editingGoalId
+        ? { ...g, title: editGoalForm.title, targetDate: editGoalForm.targetDate, result: editGoalForm.result || undefined, notes: editGoalForm.notes || undefined }
+        : g
+    )
+    const updatedAthlete = { ...athlete, goals: updatedGoals }
+    const all = getAthletes()
+    saveAthletes(all.map(a => a.id === id ? updatedAthlete : a))
+    setAthlete(updatedAthlete)
+    setEditingGoalId(null)
   }
 
   const handleDeleteAthlete = () => {
@@ -436,49 +471,67 @@ export default function AthleteProfilePage() {
           {(athlete.goals || []).length === 0 ? (
             <p className="text-xs text-gray-400 py-4 italic text-center">No hay objetivos definidos aún.</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 max-h-60 overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6 max-h-72 overflow-y-auto pr-1">
               {(athlete.goals || []).map(goal => (
-                <div 
-                  key={goal.id} 
-                  className="flex items-center justify-between p-3.5 rounded-xl border transition-all"
-                  style={{ 
-                    background: goal.completed ? 'rgba(4, 120, 87, 0.02)' : '#F9FAFB', 
-                    borderColor: goal.completed ? '#A7F3D0' : '#E8E9EB' 
-                  }}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <button
-                      onClick={() => handleToggleGoal(goal.id)}
-                      className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 transition-colors"
-                      style={{ 
-                        background: goal.completed ? '#047857' : 'transparent',
-                        border: goal.completed ? 'none' : '1px solid #D5D8DD',
-                        color: '#FFFFFF'
-                      }}
-                    >
-                      {goal.completed && <span className="text-[10px] font-bold">✓</span>}
-                    </button>
-                    <div className="min-w-0">
-                      <p 
-                        className="text-xs font-semibold truncate leading-normal" 
-                        style={{ 
-                          color: goal.completed ? '#6B7280' : '#1C1F23',
-                          textDecoration: goal.completed ? 'line-through' : 'none'
-                        }}
-                      >
-                        {goal.title}
-                      </p>
-                      <p className="text-[9px] text-[#7A7E85] mt-0.5">
-                        Meta: {new Date(goal.targetDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
+                <div key={goal.id} className="rounded-xl border transition-all overflow-hidden"
+                  style={{ background: goal.completed ? 'rgba(4,120,87,0.02)' : '#F9FAFB', borderColor: goal.completed ? '#A7F3D0' : '#E8E9EB' }}>
+                  {editingGoalId === goal.id ? (
+                    <div className="p-3 space-y-2">
+                      <input
+                        className="w-full text-xs border border-[#D5D8DD] rounded-lg px-2 py-1.5 focus:outline-none focus:border-gray-500 bg-white"
+                        value={editGoalForm.title}
+                        onChange={e => setEditGoalForm(f => ({ ...f, title: e.target.value }))}
+                        placeholder="Objetivo"
+                      />
+                      <input
+                        type="date"
+                        className="w-full text-xs border border-[#D5D8DD] rounded-lg px-2 py-1.5 focus:outline-none focus:border-gray-500 bg-white"
+                        value={editGoalForm.targetDate}
+                        onChange={e => setEditGoalForm(f => ({ ...f, targetDate: e.target.value }))}
+                      />
+                      <input
+                        className="w-full text-xs border border-[#D5D8DD] rounded-lg px-2 py-1.5 focus:outline-none focus:border-gray-500 bg-white"
+                        value={editGoalForm.result}
+                        onChange={e => setEditGoalForm(f => ({ ...f, result: e.target.value }))}
+                        placeholder="Resultado obtenido (opcional)"
+                      />
+                      <input
+                        className="w-full text-xs border border-[#D5D8DD] rounded-lg px-2 py-1.5 focus:outline-none focus:border-gray-500 bg-white"
+                        value={editGoalForm.notes}
+                        onChange={e => setEditGoalForm(f => ({ ...f, notes: e.target.value }))}
+                        placeholder="Notas adicionales (opcional)"
+                      />
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={handleSaveEditGoal} className="flex-1 py-1 rounded-lg text-[10px] font-bold text-white" style={{ background: '#1C1F23' }}>Guardar</button>
+                        <button onClick={() => setEditingGoalId(null)} className="flex-1 py-1 rounded-lg text-[10px] font-bold border border-[#D5D8DD] text-[#4A4F57] bg-white">Cancelar</button>
+                      </div>
                     </div>
-                  </div>
-                  <button 
-                    onClick={() => handleDeleteGoal(goal.id)}
-                    className="text-gray-400 hover:text-red-500 transition-colors text-xs p-1 ml-2"
-                  >
-                    ✕
-                  </button>
+                  ) : (
+                    <div className="flex items-start justify-between p-3.5">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <button onClick={() => handleToggleGoal(goal.id)}
+                          className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors"
+                          style={{ background: goal.completed ? '#047857' : 'transparent', border: goal.completed ? 'none' : '1px solid #D5D8DD', color: '#FFFFFF' }}>
+                          {goal.completed && <span className="text-[10px] font-bold">✓</span>}
+                        </button>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold leading-normal"
+                            style={{ color: goal.completed ? '#6B7280' : '#1C1F23', textDecoration: goal.completed ? 'line-through' : 'none' }}>
+                            {goal.title}
+                          </p>
+                          <p className="text-[9px] text-[#7A7E85] mt-0.5">
+                            Meta: {new Date(goal.targetDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                          {goal.result && <p className="text-[9px] text-emerald-600 font-semibold mt-0.5">Resultado: {goal.result}</p>}
+                          {goal.notes && <p className="text-[9px] text-[#7A7E85] italic mt-0.5">{goal.notes}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                        <button onClick={() => handleStartEditGoal(goal)} className="text-gray-400 hover:text-gray-700 transition-colors text-[10px] p-1" title="Editar">✏️</button>
+                        <button onClick={() => handleDeleteGoal(goal.id)} className="text-gray-400 hover:text-red-500 transition-colors text-xs p-1">✕</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -715,44 +768,65 @@ export default function AthleteProfilePage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {plans.map(plan => {
               const isActive = new Date(plan.endDate) >= today
+              const isExpanded = expandedPlanIds.has(plan.id)
               const totalDays = plan.weeks.reduce((s, w) => s + w.days.length, 0)
               const totalExs = plan.weeks.flatMap(w => w.days.flatMap(d => d.exercises)).length
 
               return (
                 <div
                   key={plan.id}
-                  className="bg-white rounded-2xl p-6 border border-[#E8E9EB] shadow-sm space-y-5"
+                  className="bg-white rounded-2xl border border-[#E8E9EB] shadow-sm overflow-hidden"
                 >
-                  {/* Plan header */}
-                  <div className="flex items-center justify-between pb-3 border-b border-[#F5F5F6]">
+                  {/* Plan header — always visible */}
+                  <div
+                    className="flex items-center justify-between p-5 cursor-pointer select-none"
+                    onClick={() => setExpandedPlanIds(prev => {
+                      const next = new Set(prev)
+                      if (next.has(plan.id)) next.delete(plan.id)
+                      else next.add(plan.id)
+                      return next
+                    })}
+                  >
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="font-bold text-gray-900 text-sm tracking-tight">
-                        {plan.name}
-                      </h3>
+                      <span className="text-sm font-medium text-gray-400 mr-1">{isExpanded ? '▾' : '▸'}</span>
+                      <h3 className="font-bold text-gray-900 text-sm tracking-tight">{plan.name}</h3>
                       {isActive && (
                         <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ background: '#ECFDF5', color: '#047857', border: '1px solid #A7F3D0' }}>
                           <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#34D399' }} />
                           Activo
                         </span>
                       )}
+                      <span className="text-[10px] text-gray-400 font-medium">{plan.weeks.length} sem · {totalDays} días · {totalExs} ejercicios</span>
+                    </div>
+                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                       <Link
                         href={`/coach/athletes/${id}/plan/${plan.id}/edit`}
-                        className="px-2.5 py-0.5 rounded-md text-[10px] font-bold border border-[#D5D8DD] hover:bg-[#F5F5F6] transition-colors inline-block text-center bg-white"
+                        className="px-2.5 py-1 rounded-md text-[10px] font-bold border border-[#D5D8DD] hover:bg-[#F5F5F6] transition-colors bg-white"
                         style={{ color: '#4A4F57' }}
                       >
-                        Editar plan
+                        Editar
                       </Link>
+                      <button
+                        onClick={() => handleDeletePlan(plan.id, plan.name)}
+                        className="px-2.5 py-1 rounded-md text-[10px] font-bold border transition-colors"
+                        style={{ color: '#ef4444', border: '1px solid rgba(239,68,68,0.25)', background: '#fff' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.05)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#fff' }}
+                      >
+                        Eliminar
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Calendar view of weeks — only when expanded */}
+                  {isExpanded && (
+                  <div className="px-5 pb-5 space-y-6 border-t border-[#F5F5F6] pt-4">
                     <p className="eyebrow text-xs" style={{ color: '#7A7E85' }}>
                       Semana Deportiva inicia en <span className="lowercase font-bold text-gray-900">{athlete.startOfWeekDay || 'lunes'}</span>
                     </p>
-                  </div>
-
-                  {/* Calendar view of weeks */}
-                  <div className="space-y-6">
                     {plan.weeks.map(week => {
                       const sortedDays = sortDaysByStartOfWeek(week.days, athlete.startOfWeekDay || 'lunes')
 
@@ -831,6 +905,7 @@ export default function AthleteProfilePage() {
                       )
                     })}
                   </div>
+                  )}
                 </div>
               )
             })}

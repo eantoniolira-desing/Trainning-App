@@ -75,6 +75,13 @@ export default function AthleteDashboard() {
   // Calendar expanded day per week
   const [expandedDayId, setExpandedDayId] = useState<string | null>(null)
 
+  // Collapsible weeks
+  const [collapsedWeekIds, setCollapsedWeekIds] = useState<Set<string>>(new Set())
+
+  // Goal edit states
+  const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
+  const [editGoalForm, setEditGoalForm] = useState({ title: '', targetDate: '', result: '', notes: '' })
+
   // Strength Library items for lookups
   const [strengthExercises, setStrengthExercises] = useState<StrengthExercise[]>([])
   const [showGuide, setShowGuide] = useState<StrengthExercise | null>(null)
@@ -323,6 +330,25 @@ export default function AthleteDashboard() {
     const updatedList = all.map(a => a.id === athlete.id ? updatedAthlete : a)
     saveAthletes(updatedList)
     setAthlete(updatedAthlete)
+  }
+
+  const handleStartEditGoal = (goal: import('@/lib/types').GoalEntry) => {
+    setEditingGoalId(goal.id)
+    setEditGoalForm({ title: goal.title, targetDate: goal.targetDate, result: goal.result || '', notes: goal.notes || '' })
+  }
+
+  const handleSaveEditGoal = () => {
+    if (!athlete || !editingGoalId) return
+    const updatedGoals = (athlete.goals || []).map(g =>
+      g.id === editingGoalId
+        ? { ...g, title: editGoalForm.title, targetDate: editGoalForm.targetDate, result: editGoalForm.result || undefined, notes: editGoalForm.notes || undefined }
+        : g
+    )
+    const updatedAthlete = { ...athlete, goals: updatedGoals }
+    const all = getAthletes()
+    saveAthletes(all.map(a => a.id === athlete.id ? updatedAthlete : a))
+    setAthlete(updatedAthlete)
+    setEditingGoalId(null)
   }
 
   const handleSelectDay = (day: TrainingDay) => {
@@ -591,41 +617,43 @@ export default function AthleteDashboard() {
             {(athlete.goals || []).length === 0 ? (
               <p className="text-xs text-gray-400 py-3 italic text-center">No tienes objetivos cargados.</p>
             ) : (
-              <div className="space-y-2 mb-4 max-h-48 overflow-y-auto pr-1">
+              <div className="space-y-2 mb-4 max-h-64 overflow-y-auto pr-1">
                 {(athlete.goals || []).map(goal => (
-                  <div 
-                    key={goal.id} 
-                    className="flex items-center gap-3 p-2.5 rounded-xl border transition-all"
-                    style={{ 
-                      background: goal.completed ? 'rgba(4, 120, 87, 0.02)' : '#F9FAFB', 
-                      borderColor: goal.completed ? '#A7F3D0' : '#E8E9EB' 
-                    }}
-                  >
-                    <button
-                      onClick={() => handleToggleGoal(goal.id)}
-                      className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 transition-colors"
-                      style={{ 
-                        background: goal.completed ? '#047857' : 'transparent',
-                        border: goal.completed ? 'none' : '1px solid #D5D8DD',
-                        color: '#FFFFFF'
-                      }}
-                    >
-                      {goal.completed && <span className="text-[8px] font-bold">✓</span>}
-                    </button>
-                    <div className="min-w-0 flex-1">
-                      <p 
-                        className="text-xs font-semibold truncate leading-normal" 
-                        style={{ 
-                          color: goal.completed ? '#6B7280' : '#1C1F23',
-                          textDecoration: goal.completed ? 'line-through' : 'none'
-                        }}
-                      >
-                        {goal.title}
-                      </p>
-                      <p className="text-[8px] text-[#7A7E85] mt-0.5">
-                        Meta: {new Date(goal.targetDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </p>
-                    </div>
+                  <div key={goal.id} className="rounded-xl border overflow-hidden transition-all"
+                    style={{ background: goal.completed ? 'rgba(4,120,87,0.02)' : '#F9FAFB', borderColor: goal.completed ? '#A7F3D0' : '#E8E9EB' }}>
+                    {editingGoalId === goal.id ? (
+                      <div className="p-2.5 space-y-1.5">
+                        <input className="w-full text-xs border border-[#D5D8DD] rounded-lg px-2 py-1.5 focus:outline-none bg-white"
+                          value={editGoalForm.title} onChange={e => setEditGoalForm(f => ({ ...f, title: e.target.value }))} placeholder="Objetivo" />
+                        <input type="date" className="w-full text-xs border border-[#D5D8DD] rounded-lg px-2 py-1.5 focus:outline-none bg-white"
+                          value={editGoalForm.targetDate} onChange={e => setEditGoalForm(f => ({ ...f, targetDate: e.target.value }))} />
+                        <input className="w-full text-xs border border-[#D5D8DD] rounded-lg px-2 py-1.5 focus:outline-none bg-white"
+                          value={editGoalForm.result} onChange={e => setEditGoalForm(f => ({ ...f, result: e.target.value }))} placeholder="Resultado obtenido (opcional)" />
+                        <div className="flex gap-2 pt-0.5">
+                          <button onClick={handleSaveEditGoal} className="flex-1 py-1 rounded-lg text-[10px] font-bold text-white" style={{ background: '#1C1F23' }}>Guardar</button>
+                          <button onClick={() => setEditingGoalId(null)} className="flex-1 py-1 rounded-lg text-[10px] font-bold border border-[#D5D8DD] text-[#4A4F57] bg-white">Cancelar</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-start gap-2.5 p-2.5">
+                        <button onClick={() => handleToggleGoal(goal.id)}
+                          className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors"
+                          style={{ background: goal.completed ? '#047857' : 'transparent', border: goal.completed ? 'none' : '1px solid #D5D8DD', color: '#FFFFFF' }}>
+                          {goal.completed && <span className="text-[8px] font-bold">✓</span>}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-semibold leading-normal"
+                            style={{ color: goal.completed ? '#6B7280' : '#1C1F23', textDecoration: goal.completed ? 'line-through' : 'none' }}>
+                            {goal.title}
+                          </p>
+                          <p className="text-[8px] text-[#7A7E85] mt-0.5">
+                            Meta: {new Date(goal.targetDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                          {goal.result && <p className="text-[8px] text-emerald-600 font-semibold mt-0.5">Resultado: {goal.result}</p>}
+                        </div>
+                        <button onClick={() => handleStartEditGoal(goal)} className="text-gray-300 hover:text-gray-500 transition-colors text-[10px] p-0.5 flex-shrink-0">✏️</button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -695,10 +723,16 @@ export default function AthleteDashboard() {
                   return (
                     <div key={week.id} className="rounded-2xl border border-[#E8E9EB] overflow-hidden shadow-sm">
 
-                      {/* Week header */}
+                      {/* Week header — clickable to collapse */}
                       <div
-                        className="px-5 py-2.5 flex items-center justify-between"
+                        className="px-5 py-2.5 flex items-center justify-between cursor-pointer select-none"
                         style={{ background: wc.bg }}
+                        onClick={() => setCollapsedWeekIds(prev => {
+                          const next = new Set(prev)
+                          if (next.has(week.id)) next.delete(week.id)
+                          else next.add(week.id)
+                          return next
+                        })}
                       >
                         <div className="flex items-center gap-2.5">
                           <span
@@ -711,12 +745,19 @@ export default function AthleteDashboard() {
                             {sortedDays[0]?.dayLabel?.split(' ').slice(1).join(' ')} → {sortedDays[sortedDays.length - 1]?.dayLabel?.split(' ').slice(1).join(' ')}
                           </span>
                         </div>
-                        <span className="text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                          {sortedDays.filter(d => d.feedback?.completed).length}/{sortedDays.length} ✓
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                            {sortedDays.filter(d => d.feedback?.completed).length}/{sortedDays.length} ✓
+                          </span>
+                          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                            {collapsedWeekIds.has(week.id) ? '▸' : '▾'}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* 7-column day grid */}
+                      {/* 7-column day grid + expanded panel — hidden when week is collapsed */}
+                      {!collapsedWeekIds.has(week.id) && (
+                      <>
                       <div className="grid grid-cols-7 divide-x divide-[#F0F0F1]">
                         {sortedDays.map((day, di) => {
                           const isExpanded = expandedDayId === day.id
@@ -878,6 +919,8 @@ export default function AthleteDashboard() {
                             )}
                           </div>
                         </div>
+                      )}
+                      </>
                       )}
 
                     </div>

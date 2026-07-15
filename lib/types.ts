@@ -61,6 +61,8 @@ export interface GoalEntry {
   targetDate: string
   completed: boolean
   createdAt: string
+  result?: string
+  notes?: string
 }
 
 export interface Athlete {
