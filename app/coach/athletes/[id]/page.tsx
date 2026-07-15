@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications, syncFromSupabase } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications, fetchPlansFromSupabase } from '@/lib/db'
 import { Athlete, TrainingPlan, TrainingDay, StrengthExercise, CommentReply } from '@/lib/types'
 
 const AVATAR_COLORS = ['#4A4F57', '#3a3f47', '#5a5f67', '#2d3035', '#4A4F57']
@@ -42,13 +42,11 @@ export default function AthleteProfilePage() {
   const [repliesTexts, setRepliesTexts] = useState<Record<string, string>>({})
 
   const loadPlans = async () => {
-    try { await syncFromSupabase() } catch {}
     const todayDate = new Date(); todayDate.setHours(0,0,0,0)
-    const athletePlans = getPlans()
-      .filter(p => p.athleteId === id)
+    // Always fetch directly from Supabase so coach sees live athlete progress
+    const athletePlans = (await fetchPlansFromSupabase(id))
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     setPlans(athletePlans)
-    // Auto-expand active plan (only on first load, don't override user's selections)
     setExpandedPlanIds(prev => {
       if (prev.size > 0) return prev
       const activePlan = athletePlans.find(p => new Date(p.endDate) >= todayDate)

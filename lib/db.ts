@@ -715,6 +715,32 @@ export function savePlans(plans: TrainingPlan[]) {
   pushPlansToSupabase(plans).catch(() => {});
 }
 
+export async function fetchPlansFromSupabase(athleteId: string): Promise<TrainingPlan[]> {
+  if (!isBrowser()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('training_plans')
+      .select('*')
+      .eq('athlete_id', athleteId);
+    if (error || !data || data.length === 0) return getPlans().filter(p => p.athleteId === athleteId);
+    const remote: TrainingPlan[] = data.map((p: Record<string, unknown>) => ({
+      id: p.id as string,
+      name: p.name as string,
+      athleteId: p.athlete_id as string,
+      startDate: p.start_date as string,
+      endDate: p.end_date as string,
+      weeks: p.weeks as TrainingPlan['weeks'],
+      createdAt: p.created_at as string,
+    }));
+    // Write back to localStorage so getPlans() stays in sync
+    const allLocal = getPlans().filter(p => p.athleteId !== athleteId);
+    localStorage.setItem(KEY_PLANS, JSON.stringify([...allLocal, ...remote]));
+    return remote;
+  } catch {
+    return getPlans().filter(p => p.athleteId === athleteId);
+  }
+}
+
 export function getCoachProfile(): CoachProfile {
   if (!isBrowser()) return DEFAULT_COACH;
   initDB();
