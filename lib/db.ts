@@ -1275,6 +1275,34 @@ async function pushNotificationsToSupabase(notifs: NotificationEntry[]) {
   await supabase.from('notifications').upsert(rows);
 }
 
+export async function fetchNotificationsForAthlete(athleteId: string): Promise<NotificationEntry[]> {
+  if (!isBrowser()) return [];
+  try {
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('athlete_id', athleteId)
+      .order('created_at', { ascending: false });
+    if (error || !data) return getNotifications().filter(n => n.athleteId === athleteId);
+    const remote: NotificationEntry[] = data.map((n: Record<string, unknown>) => ({
+      id: n.id as string,
+      athleteId: n.athlete_id as string,
+      athleteName: n.athlete_name as string,
+      planId: n.plan_id as string,
+      dayId: n.day_id as string,
+      dayLabel: n.day_label as string,
+      comments: n.comments as string | undefined,
+      feelingRating: n.feeling_rating as number,
+      feelingEmoji: n.feeling_emoji as string,
+      createdAt: n.created_at as string,
+      read: n.read as boolean,
+    }));
+    return remote;
+  } catch {
+    return getNotifications().filter(n => n.athleteId === athleteId);
+  }
+}
+
 async function pushAthleteNotificationsToSupabase(notifs: AthleteNotificationEntry[]) {
   if (!isBrowser() || notifs.length === 0) return;
   const rows = notifs.map(n => ({

@@ -3,8 +3,8 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications } from '@/lib/db'
-import { Athlete, TrainingPlan, TrainingDay, StrengthExercise, CommentReply } from '@/lib/types'
+import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, fetchNotificationsForAthlete } from '@/lib/db'
+import { Athlete, TrainingPlan, TrainingDay, StrengthExercise, NotificationEntry } from '@/lib/types'
 
 const AVATAR_COLORS = ['#4A4F57', '#3a3f47', '#5a5f67', '#2d3035', '#4A4F57']
 const PHOTO_KEY = (id: string) => `athlete-photo-${id}`
@@ -35,12 +35,11 @@ export default function AthleteProfilePage() {
 
   // Buzón collapse
   const [buzonCollapsed, setBuzonCollapsed] = useState(false)
+  const [sessionNotifs, setSessionNotifs] = useState<NotificationEntry[]>([])
 
   // Strength library lookup states
   const [strengthExercises, setStrengthExercises] = useState<StrengthExercise[]>([])
   const [showGuide, setShowGuide] = useState<StrengthExercise | null>(null)
-  const [repliesTexts, setRepliesTexts] = useState<Record<string, string>>({})
-
   const loadPlans = () => {
     const todayDate = new Date(); todayDate.setHours(0,0,0,0)
     const local = getPlans()
@@ -54,38 +53,6 @@ export default function AthleteProfilePage() {
     })
   }
 
-  const handleSendReply = (planId: string, dayId: string, dayLabel: string) => {
-    const text = repliesTexts[dayId] || ''
-    if (!text.trim() || !athlete) return
-
-    const newReply: CommentReply = {
-      id: Math.random().toString(36).slice(2),
-      sender: 'coach',
-      senderName: 'Óscar Barrón',
-      text: text.trim(),
-      createdAt: new Date().toISOString()
-    }
-
-    addReplyToSession(planId, dayId, newReply)
-
-    // Notify athlete
-    const athleteNotifs = getAthleteNotifications()
-    const newAthleteNotif = {
-      id: Math.random().toString(36).slice(2),
-      athleteId: athlete.id,
-      planId: planId,
-      dayId: dayId,
-      dayLabel: dayLabel,
-      text: `Óscar Barrón respondió a tu entrenamiento: "${text.trim().substring(0, 40)}${text.trim().length > 40 ? '...' : ''}"`,
-      createdAt: new Date().toISOString(),
-      read: false
-    }
-    saveAthleteNotifications([newAthleteNotif, ...athleteNotifs])
-
-    window.dispatchEvent(new Event('chat-reply-saved'))
-    setRepliesTexts(prev => ({ ...prev, [dayId]: '' }))
-    loadPlans()
-  }
 
   useEffect(() => {
     const all = getAthletes()
@@ -103,8 +70,10 @@ export default function AthleteProfilePage() {
     } catch {}
     
     setStrengthExercises(getStrengthLibrary())
-    
     setMounted(true)
+
+    // Load notifications from Supabase (fresh, cross-device)
+    fetchNotificationsForAthlete(id).then(notifs => setSessionNotifs(notifs)).catch(() => {})
 
     if (typeof window !== 'undefined') {
       window.addEventListener('chat-reply-saved', loadPlans)
@@ -262,12 +231,7 @@ export default function AthleteProfilePage() {
   today.setHours(0, 0, 0, 0)
   const activePlan = plans.find(p => new Date(p.endDate) >= today)
   const totalExercises = plans.flatMap(p => p.weeks.flatMap(w => w.days.flatMap(d => d.exercises))).length
-  const completedSessions = plans.flatMap(p => 
-    p.weeks.flatMap(w => 
-      w.days.map(d => ({ ...d, planName: p.name, planId: p.id }))
-    )
-  ).filter(d => d.feedback?.completed)
-   .sort((a, b) => new Date(b.feedback!.loggedAt).getTime() - new Date(a.feedback!.loggedAt).getTime())
+
 
   return (
     <div className="p-4 sm:p-8 lg:p-10 max-w-7xl mx-auto">
@@ -600,156 +564,51 @@ export default function AthleteProfilePage() {
             <span>📬</span> Buzón de Sesiones y Retroalimentación del Atleta
           </h3>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#F5F5F6] text-[#4A4F57] uppercase tracking-wider">
-            {completedSessions.length} Completadas
+            {sessionNotifs.length} Sesiones
           </span>
         </div>
 
         {!buzonCollapsed && (
-          completedSessions.length === 0 ? (
-          <p className="text-xs text-gray-400 py-6 italic text-center px-6 pb-6">
-            El atleta no ha registrado ninguna sesión evaluada aún.
-          </p>
-        ) : (
-          <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
-            {completedSessions.map(session => {
-              const fb = session.feedback!
-              const warningRating = fb.feelingRating <= 2
-              
-              return (
-                <div 
-                  key={session.id} 
-                  className="p-4 rounded-xl border transition-all"
-                  style={{ 
-                    borderColor: warningRating ? '#FFBDBD' : '#E8E9EB', 
-                    background: warningRating ? 'rgba(239, 68, 68, 0.02)' : '#F9FAFB' 
-                  }}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="text-[8px] font-bold text-gray-400 uppercase tracking-wide">
-                        {session.planName}
-                      </span>
-                      <h4 className="text-xs font-bold text-gray-900 mt-0.5">{session.dayLabel}</h4>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-xs flex items-center gap-1">
-                        {fb.feelingEmoji} <span className="text-[10px] font-bold text-gray-700">{fb.feelingRating}/5</span>
-                      </span>
-                      <span className="text-[8px] text-gray-400 block mt-0.5 font-mono">
-                        {new Date(fb.loggedAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Comments */}
-                  {fb.comments ? (
-                    <p className="text-xs text-[#4A4F57] bg-white border border-gray-150 p-2.5 rounded-lg italic mt-3 leading-relaxed shadow-sm">
-                      "{fb.comments}"
-                    </p>
-                  ) : (
-                    <p className="text-[10px] text-gray-400 italic mt-2">Sin comentarios escritos.</p>
-                  )}
-
-                  {/* Logs of exercises */}
-                  {session.logs && Object.keys(session.logs).length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-[#E8E9EB]/60">
-                      <p className="text-[8px] uppercase tracking-wider font-bold text-gray-400 mb-1.5">Métricas Registradas</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {session.exercises.map(ex => {
-                          const elog = session.logs![ex.id]
-                          if (!elog || !elog.completed) return null
-                          return (
-                            <div key={ex.id} className="text-[10px] bg-white p-2 rounded-lg border border-gray-100 leading-snug">
-                              <span className="font-bold text-gray-900 block truncate">
-                                {ex.type === 'strength' ? '💪' : '🏃'} {ex.name}
-                              </span>
-                              <span className="text-gray-500 text-[8.5px] font-semibold block mt-0.5">
-                                {ex.type === 'strength' ? (
-                                  <>
-                                    Real: {elog.actualSets || ex.sets}x{elog.actualReps || ex.reps}
-                                    {elog.actualWeight !== undefined && ` · ${elog.actualWeight}kg`}
-                                  </>
-                                ) : (
-                                  <>
-                                    Real: {elog.actualDistance || ex.distance}km
-                                    {elog.actualDuration && ` · ${elog.actualDuration}min`}
-                                    {elog.actualPace && ` · ${elog.actualPace}`}
-                                  </>
-                                )}
-                                {elog.rpe && <span className="text-red-500 font-bold ml-1">· RPE: {elog.rpe}</span>}
-                              </span>
-                            </div>
-                          )
-                        })}
+          sessionNotifs.length === 0 ? (
+            <p className="text-xs text-gray-400 py-6 italic text-center px-6 pb-6">
+              El atleta no ha registrado ninguna sesión evaluada aún.
+            </p>
+          ) : (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto px-6 py-4">
+              {sessionNotifs.map(notif => {
+                const warn = notif.feelingRating <= 2
+                return (
+                  <div
+                    key={notif.id}
+                    className="p-4 rounded-xl border"
+                    style={{
+                      borderColor: warn ? '#FFBDBD' : '#E8E9EB',
+                      background: warn ? 'rgba(239,68,68,0.02)' : '#F9FAFB',
+                    }}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <h4 className="text-xs font-bold text-gray-900">{notif.dayLabel}</h4>
+                      <div className="text-right flex-shrink-0">
+                        <span className="text-sm">{notif.feelingEmoji}</span>
+                        <span className="text-[10px] font-bold text-gray-600 ml-1">{notif.feelingRating}/5</span>
+                        <p className="text-[8px] text-gray-400 mt-0.5">
+                          {new Date(notif.createdAt).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </p>
                       </div>
                     </div>
-                  )}
-
-                  {/* Chat / Replies Section */}
-                  <div className="mt-4 pt-4 border-t border-[#E8E9EB]">
-                    <p className="text-[9px] font-bold uppercase tracking-wider mb-2" style={{ color: '#7A7E85' }}>
-                      💬 Chat de Retroalimentación
-                    </p>
-                    
-                    {fb.replies && fb.replies.length > 0 ? (
-                      <div className="space-y-3 mb-4 max-h-48 overflow-y-auto pr-1">
-                        {fb.replies.map(reply => {
-                          const isCoach = reply.sender === 'coach'
-                          return (
-                            <div 
-                              key={reply.id} 
-                              className={`flex flex-col ${isCoach ? 'items-end' : 'items-start'}`}
-                            >
-                              <div 
-                                className={`p-2.5 rounded-xl max-w-[85%] text-[11px] leading-normal shadow-sm ${
-                                  isCoach 
-                                    ? 'bg-[#1C1F23] text-white rounded-tr-none' 
-                                    : 'bg-white border border-[#E8E9EB] text-gray-900 rounded-tl-none'
-                                }`}
-                              >
-                                <div className="flex items-center gap-1.5 mb-0.5">
-                                  <span className="font-bold text-[8px] uppercase tracking-wider opacity-90">
-                                    {reply.senderName}
-                                  </span>
-                                  <span className="text-[7.5px] opacity-60">
-                                    {new Date(reply.createdAt).toLocaleDateString('es-MX', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
-                                  </span>
-                                </div>
-                                <p className="whitespace-pre-line">{reply.text}</p>
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
+                    {notif.comments ? (
+                      <p className="text-xs text-[#4A4F57] bg-white border border-[#E8E9EB] p-2.5 rounded-lg italic mt-2 leading-relaxed">
+                        "{notif.comments}"
+                      </p>
                     ) : (
-                      <p className="text-[10px] text-gray-400 italic mb-4">Sin mensajes de seguimiento aún.</p>
+                      <p className="text-[10px] text-gray-400 italic mt-1">Sin comentarios.</p>
                     )}
-
-                    {/* Send reply form */}
-                    <div className="flex gap-2 items-end">
-                      <div className="flex-1">
-                        <textarea
-                          rows={1}
-                          value={repliesTexts[session.id] || ''}
-                          onChange={e => setRepliesTexts(prev => ({ ...prev, [session.id]: e.target.value }))}
-                          placeholder="Responder al atleta..."
-                          className="w-full bg-white border border-[#D5D8DD] rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-[#7A7E85] text-gray-900 resize-none max-h-20"
-                        />
-                      </div>
-                      <button
-                        onClick={() => handleSendReply(session.planId, session.id, session.dayLabel)}
-                        className="py-2 px-3 bg-[#1C1F23] hover:bg-black text-white text-[11px] font-bold rounded-xl transition-all cursor-pointer h-[34px] flex items-center justify-center flex-shrink-0"
-                      >
-                        Enviar
-                      </button>
-                    </div>
                   </div>
-
-                </div>
-              )
-            })}
-          </div>
-        ))}
+                )
+              })}
+            </div>
+          )
+        )}
       </div>
 
       {/* Plans Section */}
