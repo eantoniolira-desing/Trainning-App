@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { getAthletes, getPlans, saveAthletes, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications } from '@/lib/db'
 import { Athlete, TrainingPlan, TrainingDay, StrengthExercise, CommentReply } from '@/lib/types'
 
 const AVATAR_COLORS = ['#4A4F57', '#3a3f47', '#5a5f67', '#2d3035', '#4A4F57']
