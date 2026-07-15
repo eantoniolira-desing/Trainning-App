@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications, fetchPlansFromSupabase } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications } from '@/lib/db'
 import { Athlete, TrainingPlan, TrainingDay, StrengthExercise, CommentReply } from '@/lib/types'
 
 const AVATAR_COLORS = ['#4A4F57', '#3a3f47', '#5a5f67', '#2d3035', '#4A4F57']
@@ -43,8 +43,6 @@ export default function AthleteProfilePage() {
 
   const loadPlans = () => {
     const todayDate = new Date(); todayDate.setHours(0,0,0,0)
-
-    // 1. Show localStorage instantly — no delay
     const local = getPlans()
       .filter(p => p.athleteId === id)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
@@ -54,18 +52,6 @@ export default function AthleteProfilePage() {
       const active = local.find(p => new Date(p.endDate) >= todayDate)
       return active ? new Set([active.id]) : prev
     })
-
-    // 2. Refresh from Supabase in background — update silently when ready
-    fetchPlansFromSupabase(id).then(remote => {
-      console.log('[Coach] Supabase plans received:', remote.length, remote.map(p => ({
-        id: p.id, name: p.name,
-        done: p.weeks.flatMap(w => w.days).filter(d => d.feedback?.completed).length,
-        total: p.weeks.flatMap(w => w.days).length,
-      })))
-      if (remote.length === 0) return
-      const sorted = remote.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      setPlans(sorted)
-    }).catch(e => console.error('[Coach] fetchPlansFromSupabase failed:', e))
   }
 
   const handleSendReply = (planId: string, dayId: string, dayLabel: string) => {
@@ -122,20 +108,7 @@ export default function AthleteProfilePage() {
 
     if (typeof window !== 'undefined') {
       window.addEventListener('chat-reply-saved', loadPlans)
-      window.addEventListener('athlete-session-saved', loadPlans)
-      // Also catch cross-tab localStorage changes
-      const handleStorage = (e: StorageEvent) => {
-        if (e.key === 'training_plans' || e.key === null) loadPlans()
-      }
-      window.addEventListener('storage', handleStorage)
-      // Poll Supabase every 30s for cross-device updates
-      const interval = setInterval(loadPlans, 30_000)
-      return () => {
-        window.removeEventListener('chat-reply-saved', loadPlans)
-        window.removeEventListener('athlete-session-saved', loadPlans)
-        window.removeEventListener('storage', handleStorage)
-        clearInterval(interval)
-      }
+      return () => window.removeEventListener('chat-reply-saved', loadPlans)
     }
   }, [id])
 
@@ -809,8 +782,6 @@ export default function AthleteProfilePage() {
               const isExpanded = expandedPlanIds.has(plan.id)
               const allDays = plan.weeks.flatMap(w => w.days)
               const totalDays = allDays.length
-              const doneDays = allDays.filter(d => d.feedback?.completed).length
-              const pct = totalDays > 0 ? Math.round(doneDays / totalDays * 100) : 0
               const totalExs = allDays.flatMap(d => d.exercises).length
 
               return (
@@ -839,22 +810,7 @@ export default function AthleteProfilePage() {
                       )}
                       <span className="text-[10px] text-gray-400 font-medium">{plan.weeks.length} sem · {totalDays} días · {totalExs} ejercicios</span>
                     </div>
-                    <div className="flex items-center gap-3" onClick={e => e.stopPropagation()}>
-                      {/* Progress ring */}
-                      <div className="relative w-9 h-9 flex-shrink-0 cursor-default" title={`${doneDays}/${totalDays} días completados`}>
-                        <svg className="w-9 h-9 -rotate-90" viewBox="0 0 36 36">
-                          <circle cx="18" cy="18" r="15" fill="none" stroke="#F0F0F1" strokeWidth="3" />
-                          <circle cx="18" cy="18" r="15" fill="none"
-                            stroke={pct === 100 ? '#047857' : isActive ? '#A8FF00' : '#D1D5DB'}
-                            strokeWidth="3"
-                            strokeDasharray={`${pct * 0.942} 94.2`}
-                            strokeLinecap="round"
-                          />
-                        </svg>
-                        <span className="absolute inset-0 flex items-center justify-center text-[8px] font-black text-gray-700">
-                          {pct === 100 ? '✓' : `${pct}%`}
-                        </span>
-                      </div>
+                    <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                       <Link
                         href={`/coach/athletes/${id}/plan/${plan.id}/edit`}
                         className="px-2.5 py-1 rounded-md text-[10px] font-bold border border-[#D5D8DD] hover:bg-[#F5F5F6] transition-colors bg-white"
@@ -891,30 +847,15 @@ export default function AthleteProfilePage() {
                           
                           {/* Calendar Grid of 7 days */}
                           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-7 gap-3">
-                            {sortedDays.map(day => {
-                              const fb = day.feedback
-                              const isDone = !!fb?.completed
-                              return (
+                            {sortedDays.map(day => (
                               <div
                                 key={day.id}
-                                className="border rounded-xl p-3 flex flex-col justify-between shadow-sm min-h-[140px]"
-                                style={{
-                                  background: isDone ? 'rgba(236,253,245,0.5)' : '#F9FAFB',
-                                  borderColor: isDone ? '#A7F3D0' : '#E8E9EB',
-                                }}
+                                className="bg-[#F9FAFB] border border-[#E8E9EB] rounded-xl p-3 flex flex-col justify-between shadow-sm min-h-[140px]"
                               >
                                 <div>
-                                  {/* Day label + completion badge */}
                                   <div className="flex items-center justify-between pb-1.5 border-b border-[#E8E9EB] mb-2">
                                     <p className="text-xs font-bold text-gray-900 truncate tracking-tight">{day.dayLabel}</p>
-                                    {isDone && (
-                                      <span className="text-base flex-shrink-0 ml-1" title={`Completado ${fb?.loggedAt || ''}`}>
-                                        {fb?.feelingEmoji || '✓'}
-                                      </span>
-                                    )}
                                   </div>
-
-                                  {/* Exercises detail list */}
                                   {day.exercises.length === 0 ? (
                                     <p className="text-[10px] text-gray-400 italic">Descanso</p>
                                   ) : (
@@ -941,22 +882,13 @@ export default function AthleteProfilePage() {
                                             </div>
                                             <p className="text-gray-500 mt-0.5 text-[9px] font-semibold">
                                               {ex.type === 'strength' ? (
-                                                <>
-                                                  {ex.sets}x{ex.reps}
-                                                  {ex.weight && ` · ${ex.weight}kg`}
-                                                </>
+                                                <>{ex.sets}x{ex.reps}{ex.weight && ` · ${ex.weight}kg`}</>
                                               ) : (
-                                                <>
-                                                  {ex.distance && `${ex.distance}km`}
-                                                  {ex.duration && ` · ${ex.duration}'`}
-                                                  {ex.pace && ` · ${ex.pace}`}
-                                                </>
+                                                <>{ex.distance && `${ex.distance}km`}{ex.duration && ` · ${ex.duration}'`}{ex.pace && ` · ${ex.pace}`}</>
                                               )}
                                             </p>
                                             {ex.notes && (
-                                              <p className="text-[8.5px] text-[#7A7E85] italic mt-0.5 border-t border-gray-100 pt-0.5">
-                                                {ex.notes}
-                                              </p>
+                                              <p className="text-[8.5px] text-[#7A7E85] italic mt-0.5 border-t border-gray-100 pt-0.5">{ex.notes}</p>
                                             )}
                                           </div>
                                         )
@@ -964,30 +896,8 @@ export default function AthleteProfilePage() {
                                     </div>
                                   )}
                                 </div>
-
-                                {/* Athlete feedback */}
-                                {isDone && (
-                                  <div className="mt-2.5 pt-2 border-t border-[#D1FAE5] space-y-1">
-                                    {fb?.feelingRating > 0 && (
-                                      <div className="flex gap-0.5">
-                                        {[1,2,3,4,5].map(n => (
-                                          <div key={n} className="flex-1 h-1 rounded-full"
-                                            style={{ background: n <= fb.feelingRating ? '#047857' : '#D1FAE5' }} />
-                                        ))}
-                                      </div>
-                                    )}
-                                    {fb?.comments && (
-                                      <p className="text-[9px] text-[#047857] italic leading-snug">
-                                        "{fb.comments}"
-                                      </p>
-                                    )}
-                                    {fb?.loggedAt && (
-                                      <p className="text-[8px] text-gray-400">{new Date(fb.loggedAt + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</p>
-                                    )}
-                                  </div>
-                                )}
                               </div>
-                            )})}
+                            ))}
 
                           </div>
                         </div>
