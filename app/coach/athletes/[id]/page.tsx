@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, addReplyToSession, getAthleteNotifications, saveAthleteNotifications, syncFromSupabase } from '@/lib/db'
 import { Athlete, TrainingPlan, TrainingDay, StrengthExercise, CommentReply } from '@/lib/types'
 
 const AVATAR_COLORS = ['#4A4F57', '#3a3f47', '#5a5f67', '#2d3035', '#4A4F57']
@@ -41,15 +41,19 @@ export default function AthleteProfilePage() {
   const [showGuide, setShowGuide] = useState<StrengthExercise | null>(null)
   const [repliesTexts, setRepliesTexts] = useState<Record<string, string>>({})
 
-  const loadPlans = () => {
+  const loadPlans = async () => {
+    try { await syncFromSupabase() } catch {}
     const todayDate = new Date(); todayDate.setHours(0,0,0,0)
     const athletePlans = getPlans()
       .filter(p => p.athleteId === id)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     setPlans(athletePlans)
-    // Auto-expand active plan
-    const activePlan = athletePlans.find(p => new Date(p.endDate) >= todayDate)
-    if (activePlan) setExpandedPlanIds(new Set([activePlan.id]))
+    // Auto-expand active plan (only on first load, don't override user's selections)
+    setExpandedPlanIds(prev => {
+      if (prev.size > 0) return prev
+      const activePlan = athletePlans.find(p => new Date(p.endDate) >= todayDate)
+      return activePlan ? new Set([activePlan.id]) : prev
+    })
   }
 
   const handleSendReply = (planId: string, dayId: string, dayLabel: string) => {
@@ -106,8 +110,19 @@ export default function AthleteProfilePage() {
 
     if (typeof window !== 'undefined') {
       window.addEventListener('chat-reply-saved', loadPlans)
+      window.addEventListener('athlete-session-saved', loadPlans)
+      // Also catch cross-tab localStorage changes
+      const handleStorage = (e: StorageEvent) => {
+        if (e.key === 'training_plans' || e.key === null) loadPlans()
+      }
+      window.addEventListener('storage', handleStorage)
+      // Poll Supabase every 30s for cross-device updates
+      const interval = setInterval(loadPlans, 30_000)
       return () => {
         window.removeEventListener('chat-reply-saved', loadPlans)
+        window.removeEventListener('athlete-session-saved', loadPlans)
+        window.removeEventListener('storage', handleStorage)
+        clearInterval(interval)
       }
     }
   }, [id])
