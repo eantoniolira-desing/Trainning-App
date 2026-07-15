@@ -4,10 +4,10 @@ import { useState, useRef, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getAthletes, getPlans, savePlans } from '@/lib/db'
-import { Athlete, TrainingPlan, TrainingDay } from '@/lib/types'
+import { Athlete, TrainingPlan } from '@/lib/types'
 import type { ParsedSession } from '@/lib/parsers/excel-parser'
 
-type Method = 'manual' | 'excel' | 'word' | 'text'
+type Method = 'manual' | 'excel' | 'word'
 type ExType = 'strength' | 'cardio'
 
 interface ExForm {
@@ -17,7 +17,7 @@ interface ExForm {
 }
 
 interface SessionForm {
-  id: string; date: string; dayLabel: string; exercises: ExForm[]
+  id: string; date: string; dayLabel: string; exercises: ExForm[]; weekNumber?: number
 }
 
 const newEx = (): ExForm => ({
@@ -35,6 +35,7 @@ function parsedToForm(parsed: ParsedSession[]): SessionForm[] {
     id: s.id,
     date: s.date,
     dayLabel: s.dayLabel,
+    weekNumber: s.weekNumber,
     exercises: s.exercises.map(e => ({
       id: e.id,
       type: e.type,
@@ -56,7 +57,7 @@ export default function NewPlanPage() {
   const params = useParams()
   const router = useRouter()
   const athleteId = params.id as string
-  
+
   const [athlete, setAthlete] = useState<Athlete | null>(null)
   const [mounted, setMounted] = useState(false)
 
@@ -69,22 +70,17 @@ export default function NewPlanPage() {
 
   // File upload state
   const excelRef = useRef<HTMLInputElement>(null)
-  const wordRef = useRef<HTMLInputElement>(null)
+  const wordRef  = useRef<HTMLInputElement>(null)
   const [fileStatus, setFileStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
   const [fileError, setFileError] = useState('')
   const [wordRawText, setWordRawText] = useState('')
   const [fileName, setFileName] = useState('')
-
-  // AI text paste state
-  const [pasteText, setPasteText] = useState('')
-  const [aiWeeks, setAiWeeks] = useState<TrainingPlan['weeks'] | null>(null)
+  const [detectedWeeks, setDetectedWeeks] = useState(0)
 
   useEffect(() => {
     const all = getAthletes()
     const found = all.find(a => a.id === athleteId)
-    if (found) {
-      setAthlete(found)
-    }
+    if (found) setAthlete(found)
     setMounted(true)
   }, [athleteId])
 
@@ -101,11 +97,11 @@ export default function NewPlanPage() {
   if (!athlete) return <div className="p-8 text-gray-500">Atleta no encontrado</div>
 
   // Session/exercise helpers
-  const addSession = () => setSessions(s => [...s, newSession()])
+  const addSession    = () => setSessions(s => [...s, newSession()])
   const removeSession = (id: string) => setSessions(s => s.filter(x => x.id !== id))
   const updateSession = (id: string, field: string, value: string) =>
     setSessions(s => s.map(x => x.id === id ? { ...x, [field]: value } : x))
-  const addExercise = (sid: string) =>
+  const addExercise   = (sid: string) =>
     setSessions(s => s.map(x => x.id === sid ? { ...x, exercises: [...x.exercises, newEx()] } : x))
   const removeExercise = (sid: string, eid: string) =>
     setSessions(s => s.map(x => x.id === sid ? { ...x, exercises: x.exercises.filter(e => e.id !== eid) } : x))
@@ -116,15 +112,14 @@ export default function NewPlanPage() {
 
   // Excel upload
   async function handleExcelUpload(file: File) {
-    setFileStatus('loading')
-    setFileError('')
-    setFileName(file.name)
+    setFileStatus('loading'); setFileError(''); setFileName(file.name)
     try {
       const { parseExcel } = await import('@/lib/parsers/excel-parser')
       const buffer = await file.arrayBuffer()
       const parsed = parseExcel(buffer)
       if (!parsed.length) throw new Error('No se detectaron ejercicios. Revisa que el archivo tenga datos.')
       setSessions(parsedToForm(parsed))
+      setDetectedWeeks(new Set(parsed.map(s => s.weekNumber ?? 1)).size)
       setFileStatus('done')
     } catch (e: unknown) {
       setFileError(e instanceof Error ? e.message : 'Error al leer el archivo.')
@@ -134,9 +129,7 @@ export default function NewPlanPage() {
 
   // Word upload
   async function handleWordUpload(file: File) {
-    setFileStatus('loading')
-    setFileError('')
-    setFileName(file.name)
+    setFileStatus('loading'); setFileError(''); setFileName(file.name)
     try {
       const { parseWord } = await import('@/lib/parsers/word-parser')
       const buffer = await file.arrayBuffer()
@@ -144,10 +137,12 @@ export default function NewPlanPage() {
       setWordRawText(rawText)
       if (parsed.length) {
         setSessions(parsedToForm(parsed))
+        const weeks = new Set(parsed.map(s => s.weekNumber ?? 1)).size
+        setDetectedWeeks(weeks)
         setFileStatus('done')
       } else {
         setFileStatus('done')
-        setFileError('No se detectó estructura de días. Revisa el texto extraído y carga los ejercicios manualmente.')
+        setFileError('No se detectaron días. Revisa que el documento use el formato: "Lunes 13 julio: Ejercicio" y "Semana 1" como encabezado de semana.')
       }
     } catch (e: unknown) {
       setFileError(e instanceof Error ? e.message : 'Error al leer el archivo Word.')
@@ -155,80 +150,54 @@ export default function NewPlanPage() {
     }
   }
 
-  async function handleAiParse() {
-    if (!pasteText.trim()) return
-    setFileStatus('loading')
-    setFileError('')
-    const tempId = 'plan-' + Date.now()
-    try {
-      const res = await fetch('/api/parse-plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: pasteText, planId: tempId }),
-      })
-      const data = await res.json()
-      if (!res.ok || data.error) throw new Error(data.error || 'Error al procesar')
-      const p = data.plan
-      if (p.name && !planName) setPlanName(p.name)
-      if (p.startDate && !startDate) setStartDate(p.startDate)
-      if (p.endDate && !endDate) setEndDate(p.endDate)
-      if (p.weeks?.length) {
-        setAiWeeks(p.weeks)
-        setFileStatus('done')
-      } else {
-        throw new Error('La IA no detectó semanas. Revisa el texto.')
-      }
-    } catch (e: unknown) {
-      setFileError(e instanceof Error ? e.message : 'Error desconocido')
-      setFileStatus('error')
-    }
-  }
-
   const handleSave = () => {
     if (!planName || !startDate || !endDate) return
 
-    let weeks: TrainingPlan['weeks']
-
-    if (method === 'text' && aiWeeks) {
-      // Use AI-parsed weeks directly
-      weeks = aiWeeks
-    } else {
-      // Map sessions to a single week (manual / file methods)
-      const mappedDays = sessions.map((session, sIdx) => ({
-        id: session.id || Math.random().toString(36).slice(2),
-        date: session.date || new Date().toISOString().split('T')[0],
-        dayLabel: session.dayLabel || `Día ${sIdx + 1}`,
-        exercises: session.exercises.map(e => ({
-          id: e.id || Math.random().toString(36).slice(2),
-          type: e.type,
-          name: e.name || 'Ejercicio sin nombre',
-          sets: e.sets ? parseInt(e.sets) : undefined,
-          reps: e.reps ? parseInt(e.reps) : undefined,
-          weight: e.weight ? parseFloat(e.weight) : undefined,
-          rest: e.rest ? parseInt(e.rest) : undefined,
-          distance: e.distance ? parseFloat(e.distance) : undefined,
-          duration: e.duration ? parseFloat(e.duration) : undefined,
-          pace: e.pace || undefined,
-          heartRateZone: e.heartRateZone ? parseInt(e.heartRateZone) : undefined,
-          notes: e.notes || undefined,
-        }))
-      }))
-      weeks = [{ id: 'week-' + Math.random().toString(36).slice(2), weekNumber: 1, days: mappedDays }]
+    // Group sessions by weekNumber to create proper weeks structure
+    const weekMap = new Map<number, SessionForm[]>()
+    for (const s of sessions) {
+      const wn = s.weekNumber ?? 1
+      if (!weekMap.has(wn)) weekMap.set(wn, [])
+      weekMap.get(wn)!.push(s)
     }
+
+    const weeks: TrainingPlan['weeks'] = Array.from(weekMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([weekNumber, daySessions]) => ({
+        id: 'w-' + Math.random().toString(36).slice(2),
+        weekNumber,
+        days: daySessions.map((session, sIdx) => ({
+          id: session.id || Math.random().toString(36).slice(2),
+          date: session.date || new Date().toISOString().split('T')[0],
+          dayLabel: session.dayLabel || `Día ${sIdx + 1}`,
+          exercises: session.exercises.map(e => ({
+            id: e.id || Math.random().toString(36).slice(2),
+            type: e.type,
+            name: e.name || 'Ejercicio sin nombre',
+            sets:          e.sets     ? parseInt(e.sets)       : undefined,
+            reps:          e.reps     ? parseInt(e.reps)       : undefined,
+            weight:        e.weight   ? parseFloat(e.weight)   : undefined,
+            rest:          e.rest     ? parseInt(e.rest)        : undefined,
+            distance:      e.distance ? parseFloat(e.distance) : undefined,
+            duration:      e.duration ? parseFloat(e.duration) : undefined,
+            pace:          e.pace     || undefined,
+            heartRateZone: e.heartRateZone ? parseInt(e.heartRateZone) : undefined,
+            notes:         e.notes    || undefined,
+          })),
+        })),
+      }))
 
     const newPlan: TrainingPlan = {
       id: 'plan-' + Date.now().toString(),
       name: planName,
-      athleteId: athleteId,
-      startDate: startDate,
-      endDate: endDate,
+      athleteId,
+      startDate,
+      endDate,
       createdAt: new Date().toISOString().split('T')[0],
       weeks,
     }
 
-    const currentPlans = getPlans()
-    savePlans([...currentPlans, newPlan])
-
+    savePlans([...getPlans(), newPlan])
     setSaved(true)
     setTimeout(() => router.push(`/coach/athletes/${athleteId}`), 1500)
   }
@@ -281,14 +250,13 @@ export default function NewPlanPage() {
       {/* Method selector */}
       <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
         <h2 className="text-base font-semibold text-gray-800 mb-4">¿Cómo cargar los ejercicios?</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           {([
-            { id: 'text',   icon: '🤖', label: 'Pegar texto (IA)', desc: 'Pega el plan en cualquier formato' },
             { id: 'manual', icon: '✏️', label: 'Manual', desc: 'Ingresa ejercicio por ejercicio' },
             { id: 'excel',  icon: '📊', label: 'Excel / CSV', desc: '.xlsx, .xls, .csv' },
-            { id: 'word',   icon: '📝', label: 'Word', desc: '.docx, .doc' },
+            { id: 'word',   icon: '📝', label: 'Word', desc: '.docx — mismo formato del plan' },
           ] as const).map(opt => (
-            <button key={opt.id} onClick={() => { setMethod(opt.id); setFileStatus('idle'); setFileError(''); setWordRawText(''); setAiWeeks(null) }}
+            <button key={opt.id} onClick={() => { setMethod(opt.id); setFileStatus('idle'); setFileError(''); setWordRawText('') }}
               className={`p-4 rounded-xl border-2 text-left transition-all ${method === opt.id ? 'border-[#1C1F23] bg-[#F5F5F6]' : 'border-gray-200 hover:border-[#D5D8DD]'}`}>
               <div className="text-2xl mb-2">{opt.icon}</div>
               <p className="font-semibold text-gray-900 text-sm">{opt.label}</p>
@@ -298,71 +266,6 @@ export default function NewPlanPage() {
         </div>
       </div>
 
-      {/* AI text paste panel */}
-      {method === 'text' && fileStatus === 'idle' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h3 className="font-semibold text-gray-800 mb-1">Pega el plan en texto libre</h3>
-          <p className="text-xs text-gray-500 mb-4">
-            Copia el contenido de tu Word, email o cualquier documento. La IA lo convertirá al formato correcto automáticamente.
-          </p>
-          <textarea
-            value={pasteText}
-            onChange={e => setPasteText(e.target.value)}
-            rows={14}
-            placeholder={"Semana 1\nLunes – Fuerza Recovery + Natación\nMartes – 60' Z1 (5:45-5:55 min/km)\n..."}
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-[#1C1F23] resize-y bg-gray-50 text-gray-800"
-          />
-          <button
-            onClick={handleAiParse}
-            disabled={!pasteText.trim()}
-            className="mt-4 w-full py-3 rounded-xl text-sm font-bold text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            style={{ background: '#1C1F23' }}
-          >
-            🤖 Interpretar con IA
-          </button>
-        </div>
-      )}
-
-      {/* AI parse result preview */}
-      {method === 'text' && fileStatus === 'done' && aiWeeks && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-6">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-emerald-600 text-xl">✅</span>
-            <div>
-              <p className="text-emerald-700 font-semibold text-sm">Plan interpretado correctamente</p>
-              <p className="text-emerald-600 text-xs">
-                {aiWeeks.length} semana(s) · {aiWeeks.reduce((s, w) => s + w.days.length, 0)} día(s) · {aiWeeks.reduce((s, w) => s + w.days.reduce((ss, d) => ss + d.exercises.length, 0), 0)} ejercicio(s)
-              </p>
-            </div>
-            <button
-              onClick={() => { setFileStatus('idle'); setAiWeeks(null) }}
-              className="ml-auto text-xs text-emerald-600 hover:text-emerald-800 underline"
-            >
-              Reintentar
-            </button>
-          </div>
-          <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
-            {aiWeeks.map(week => (
-              <div key={week.id}>
-                <p className="text-xs font-bold text-gray-700 mb-1">Semana {week.weekNumber}</p>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-1.5">
-                  {week.days.map(day => (
-                    <div key={day.id} className="bg-white border border-emerald-100 rounded-lg p-2">
-                      <p className="text-[9px] font-bold text-gray-600 truncate mb-1">{day.dayLabel}</p>
-                      {day.exercises.map((ex, i) => (
-                        <p key={i} className="text-[9px] text-gray-500 truncate">
-                          {ex.type === 'strength' ? '💪' : '🏃'} {ex.name}
-                        </p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Excel upload panel */}
       {method === 'excel' && fileStatus === 'idle' && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
@@ -370,23 +273,17 @@ export default function NewPlanPage() {
             <h3 className="font-semibold text-gray-800">Subir archivo Excel / CSV</h3>
             <button
               onClick={async () => { const { downloadTemplate } = await import('@/lib/parsers/excel-parser'); downloadTemplate() }}
-              className="text-[#4A4F57] hover:text-indigo-800 text-sm underline"
-            >
+              className="text-[#4A4F57] hover:text-indigo-800 text-sm underline">
               Descargar plantilla
             </button>
           </div>
           <input ref={excelRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
             onChange={e => { if (e.target.files?.[0]) handleExcelUpload(e.target.files[0]) }} />
-          <div
-            onClick={() => excelRef.current?.click()}
-            className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-indigo-400 hover:bg-[#F5F5F6] transition-colors"
-          >
+          <div onClick={() => excelRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-[#7A7E85] hover:bg-[#F5F5F6] transition-colors">
             <div className="text-4xl mb-3">📊</div>
             <p className="text-gray-600 font-medium">Haz clic para seleccionar un archivo</p>
             <p className="text-gray-400 text-sm mt-1">.xlsx · .xls · .csv</p>
-          </div>
-          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
-            <strong>Tip:</strong> Descarga la plantilla para mejores resultados. Columnas recomendadas: Fecha, Ejercicio, Tipo, Series, Reps, Peso, Distancia, Tiempo, etc.
           </div>
         </div>
       )}
@@ -394,19 +291,32 @@ export default function NewPlanPage() {
       {/* Word upload panel */}
       {method === 'word' && fileStatus === 'idle' && (
         <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-          <h3 className="font-semibold text-gray-800 mb-4">Subir archivo Word</h3>
+          <h3 className="font-semibold text-gray-800 mb-2">Subir archivo Word</h3>
+          <p className="text-xs text-gray-500 mb-4">
+            El documento debe tener el formato: <strong>"Semana 1"</strong> como encabezado de semana y <strong>"Lunes 13 julio: Fuerza + Natación"</strong> para cada día (ejercicios separados con <strong>+</strong>).
+          </p>
           <input ref={wordRef} type="file" accept=".docx,.doc" className="hidden"
             onChange={e => { if (e.target.files?.[0]) handleWordUpload(e.target.files[0]) }} />
-          <div
-            onClick={() => wordRef.current?.click()}
-            className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-indigo-400 hover:bg-[#F5F5F6] transition-colors"
-          >
+          <div onClick={() => wordRef.current?.click()}
+            className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-[#7A7E85] hover:bg-[#F5F5F6] transition-colors">
             <div className="text-4xl mb-3">📝</div>
-            <p className="text-gray-600 font-medium">Haz clic para seleccionar un archivo Word</p>
+            <p className="text-gray-600 font-medium">Haz clic para seleccionar el archivo Word</p>
             <p className="text-gray-400 text-sm mt-1">.docx · .doc</p>
           </div>
-          <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-700">
-            <strong>Formato recomendado:</strong> Usa encabezados de día (&quot;Lunes 16/06&quot;) y guiones para cada ejercicio: &quot;– Sentadillas 3x12 60kg&quot;
+
+          {/* Format example */}
+          <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <p className="text-xs font-bold text-gray-600 mb-2 uppercase tracking-wide">Ejemplo de formato aceptado:</p>
+            <pre className="text-xs text-gray-500 whitespace-pre leading-relaxed font-mono">{`Semana 1
+Lunes 13 julio: Fuerza Recovery + Natación suave
+Martes 14 julio: 60' ZONA 1 (5:45-5:55 min/km)
+Miércoles 15 julio: Bici 30' + Fuerza
+Sábado 18 julio: 20' calentamiento + 3x3000m ZONA 2 p2' + 10' vuelta calma
+Domingo 19 julio: 90' Tirada Larga ZONA 1
+
+Semana 2
+Lunes 20 julio: Fuerza + Natación
+...`}</pre>
           </div>
         </div>
       )}
@@ -424,49 +334,51 @@ export default function NewPlanPage() {
         <div className="bg-red-50 border border-red-200 rounded-xl p-5 mb-6">
           <p className="text-red-700 font-medium">⚠️ {fileError}</p>
           <button onClick={() => { setFileStatus('idle'); setFileError('') }}
-            className="mt-3 text-sm text-red-600 hover:text-red-800 underline">
-            Intentar de nuevo
-          </button>
+            className="mt-3 text-sm text-red-600 hover:text-red-800 underline">Intentar de nuevo</button>
         </div>
       )}
 
-      {/* Success + raw text for Word */}
+      {/* Word raw text (for debugging) */}
       {method === 'word' && fileStatus === 'done' && wordRawText && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
           <div className="flex items-center justify-between mb-3">
-            <p className="font-semibold text-gray-800">📄 Texto extraído de {fileName}</p>
+            <p className="font-semibold text-gray-800 text-sm">📄 Texto extraído de {fileName}</p>
             <button onClick={() => setWordRawText('')} className="text-xs text-gray-400 hover:text-gray-600">Ocultar</button>
           </div>
-          <pre className="bg-gray-50 rounded-lg p-4 text-xs text-gray-600 whitespace-pre-wrap max-h-48 overflow-auto">
+          <pre className="bg-gray-50 rounded-lg p-4 text-xs text-gray-600 whitespace-pre-wrap max-h-40 overflow-auto">
             {wordRawText}
           </pre>
           {fileError && <p className="mt-3 text-amber-600 text-sm">⚠️ {fileError}</p>}
         </div>
       )}
 
-      {/* File done banner */}
+      {/* Success banner */}
       {fileStatus === 'done' && !fileError && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-4 flex items-center gap-3">
           <span className="text-emerald-600 text-xl">✅</span>
           <div>
             <p className="text-emerald-700 font-medium text-sm">Archivo importado correctamente</p>
-            <p className="text-emerald-600 text-xs">{sessions.length} sesión(es) detectada(s). Revisa y edita antes de guardar.</p>
+            <p className="text-emerald-600 text-xs">
+              {detectedWeeks > 1 ? `${detectedWeeks} semanas · ` : ''}{sessions.length} día(s) detectado(s). Revisa y edita antes de guardar.
+            </p>
           </div>
-          <button onClick={() => { setFileStatus('idle'); setSessions([newSession()]) }}
+          <button onClick={() => { setFileStatus('idle'); setSessions([newSession()]); setDetectedWeeks(0) }}
             className="ml-auto text-xs text-emerald-600 hover:text-emerald-800 underline">
             Subir otro archivo
           </button>
         </div>
       )}
 
-      {/* Sessions editor — shown for manual/excel/word only (text uses AI weeks preview) */}
-      {(method === 'manual' || ((method === 'excel' || method === 'word') && fileStatus === 'done')) && (
+      {/* Sessions editor */}
+      {(method === 'manual' || fileStatus === 'done') && (
         <>
           <div className="space-y-4 mb-4">
             {sessions.map((session, sIdx) => (
               <div key={session.id} className="bg-white rounded-xl border border-gray-200 p-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-800">Sesión {sIdx + 1}</h3>
+                  <h3 className="font-semibold text-gray-800">
+                    {session.weekNumber ? `Semana ${session.weekNumber} · ` : ''}Sesión {sIdx + 1}
+                  </h3>
                   {sessions.length > 1 && (
                     <button onClick={() => removeSession(session.id)} className="text-red-500 hover:text-red-700 text-sm">
                       Eliminar sesión
@@ -572,7 +484,7 @@ export default function NewPlanPage() {
                 </div>
 
                 <button onClick={() => addExercise(session.id)}
-                  className="mt-4 w-full border-2 border-dashed border-gray-300 rounded-lg py-2 text-sm text-gray-500 hover:border-indigo-400 hover:text-[#4A4F57] transition-colors">
+                  className="mt-4 w-full border-2 border-dashed border-gray-300 rounded-lg py-2 text-sm text-gray-500 hover:border-[#7A7E85] hover:text-[#4A4F57] transition-colors">
                   + Agregar ejercicio
                 </button>
               </div>
@@ -586,18 +498,16 @@ export default function NewPlanPage() {
         </>
       )}
 
-      {(method === 'manual' || ((method === 'excel' || method === 'word') && fileStatus === 'done') || (method === 'text' && !!aiWeeks)) && (
-        <div className="flex gap-3 justify-end">
-          <Link href={`/coach/athletes/${athleteId}`}
-            className="px-6 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-            Cancelar
-          </Link>
-          <button onClick={handleSave} disabled={!planName || !startDate || !endDate}
-            className="px-6 py-2 bg-[#1C1F23] text-white rounded-lg text-sm font-medium hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed">
-            Guardar plan
-          </button>
-        </div>
-      )}
+      <div className="flex gap-3 justify-end">
+        <Link href={`/coach/athletes/${athleteId}`}
+          className="px-6 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+          Cancelar
+        </Link>
+        <button onClick={handleSave} disabled={!planName || !startDate || !endDate}
+          className="px-6 py-2 bg-[#1C1F23] text-white rounded-lg text-sm font-medium hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed">
+          Guardar plan
+        </button>
+      </div>
     </div>
   )
 }

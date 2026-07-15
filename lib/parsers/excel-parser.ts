@@ -6,6 +6,7 @@ export interface ParsedSession {
   date: string
   dayLabel: string
   exercises: Exercise[]
+  weekNumber?: number
 }
 
 const COLUMN_PATTERNS: Record<string, string[]> = {
