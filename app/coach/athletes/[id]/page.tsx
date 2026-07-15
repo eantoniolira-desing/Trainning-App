@@ -41,17 +41,26 @@ export default function AthleteProfilePage() {
   const [showGuide, setShowGuide] = useState<StrengthExercise | null>(null)
   const [repliesTexts, setRepliesTexts] = useState<Record<string, string>>({})
 
-  const loadPlans = async () => {
+  const loadPlans = () => {
     const todayDate = new Date(); todayDate.setHours(0,0,0,0)
-    // Always fetch directly from Supabase so coach sees live athlete progress
-    const athletePlans = (await fetchPlansFromSupabase(id))
+
+    // 1. Show localStorage instantly — no delay
+    const local = getPlans()
+      .filter(p => p.athleteId === id)
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    setPlans(athletePlans)
+    setPlans(local)
     setExpandedPlanIds(prev => {
       if (prev.size > 0) return prev
-      const activePlan = athletePlans.find(p => new Date(p.endDate) >= todayDate)
-      return activePlan ? new Set([activePlan.id]) : prev
+      const active = local.find(p => new Date(p.endDate) >= todayDate)
+      return active ? new Set([active.id]) : prev
     })
+
+    // 2. Refresh from Supabase in background — update silently when ready
+    fetchPlansFromSupabase(id).then(remote => {
+      if (remote.length === 0) return
+      const sorted = remote.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      setPlans(sorted)
+    }).catch(() => {})
   }
 
   const handleSendReply = (planId: string, dayId: string, dayLabel: string) => {
