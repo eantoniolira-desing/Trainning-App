@@ -94,6 +94,13 @@ export default function AthleteDashboard() {
 
   const [athleteReplyText, setAthleteReplyText] = useState('')
 
+  // History day modal
+  const [historyModal, setHistoryModal] = useState<{ day: TrainingDay; plan: TrainingPlan } | null>(null)
+  const [historyEmoji, setHistoryEmoji] = useState<string>('')
+  const [historyRating, setHistoryRating] = useState<number>(0)
+  const [historyComments, setHistoryComments] = useState<string>('')
+  const [historySaved, setHistorySaved] = useState(false)
+
   const initStrengthFromDay = (day: TrainingDay) => {
     const sels: Record<string, Record<string, { series: string; reps: string }>> = {}
     const openRoutines: Record<string, string> = {}
@@ -442,6 +449,45 @@ export default function AthleteDashboard() {
     }
 
     setSaved(true)
+  }
+
+  const openHistoryDay = (day: TrainingDay, p: TrainingPlan) => {
+    setHistoryModal({ day, plan: p })
+    setHistoryEmoji(day.feedback?.feelingEmoji || '')
+    setHistoryRating(day.feedback?.feelingRating || 0)
+    setHistoryComments(day.feedback?.comments || '')
+    setHistorySaved(false)
+  }
+
+  const handleSaveHistorySession = (markComplete: boolean) => {
+    if (!athlete || !historyModal) return
+    const { day, plan: targetPlan } = historyModal
+    const updatedWeeks = targetPlan.weeks.map(week => ({
+      ...week,
+      days: week.days.map(d => {
+        if (d.id !== day.id) return d
+        return {
+          ...d,
+          feedback: {
+            completed: markComplete,
+            feelingRating: historyRating || 3,
+            feelingEmoji: historyEmoji || '😐',
+            comments: historyComments,
+            loggedAt: new Date().toISOString().split('T')[0],
+          }
+        }
+      })
+    }))
+    const updatedPlan = { ...targetPlan, weeks: updatedWeeks }
+    const all = getPlans()
+    const updatedList = all.map(p => p.id === targetPlan.id ? updatedPlan : p)
+    savePlans(updatedList)
+    setAllPlans(prev => prev.map(p => p.id === targetPlan.id ? updatedPlan : p))
+    if (plan?.id === targetPlan.id) setPlan(updatedPlan)
+    const updatedDay = updatedWeeks.flatMap(w => w.days).find(d => d.id === day.id)!
+    setHistoryModal({ day: updatedDay, plan: updatedPlan })
+    setHistorySaved(true)
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('athlete-session-saved'))
   }
 
   const updateLog = (eid: string, field: string, value: string | number | boolean) =>
@@ -1503,8 +1549,9 @@ export default function AthleteDashboard() {
                                 const rest = day.exercises.length === 0
                                 const parts = day.dayLabel.split(' ')
                                 return (
-                                  <div key={day.id}
-                                    className="rounded-xl border text-center py-2.5 px-1"
+                                  <button key={day.id} type="button"
+                                    onClick={() => openHistoryDay(day, p)}
+                                    className="rounded-xl border text-center py-2.5 px-1 w-full transition-all hover:scale-105 hover:shadow-sm active:scale-95 focus:outline-none"
                                     style={{
                                       background: done ? 'rgba(4,120,87,0.05)' : rest ? '#FAFAFA' : '#F9FAFB',
                                       borderColor: done ? '#A7F3D0' : '#E8E9EB',
@@ -1523,7 +1570,7 @@ export default function AthleteDashboard() {
                                         ))}
                                       </div>
                                     )}
-                                  </div>
+                                  </button>
                                 )
                               })}
                             </div>
@@ -1535,6 +1582,130 @@ export default function AthleteDashboard() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* ── HISTORY DAY MODAL ── */}
+      {historyModal && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm"
+          onClick={e => { if (e.target === e.currentTarget) { setHistoryModal(null); setHistorySaved(false) } }}>
+          <div className="bg-white w-full sm:max-w-lg rounded-t-3xl sm:rounded-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+
+            {/* Modal header */}
+            <div className="sticky top-0 bg-white border-b border-[#F0F0F1] px-5 py-4 flex items-center justify-between z-10">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#7A7E85]">{historyModal.plan.name}</p>
+                <h3 className="text-base font-black text-gray-900">{historyModal.day.dayLabel}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {historyModal.day.feedback?.completed && (
+                  <span className="text-xs font-bold text-[#047857] bg-[#ECFDF5] border border-[#A7F3D0] px-2.5 py-1 rounded-full">
+                    {historyModal.day.feedback.feelingEmoji} Completado
+                  </span>
+                )}
+                <button onClick={() => { setHistoryModal(null); setHistorySaved(false) }}
+                  className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 hover:text-gray-900 transition-colors text-sm font-bold">
+                  ✕
+                </button>
+              </div>
+            </div>
+
+            <div className="px-5 py-5 space-y-5">
+              {/* Exercise list */}
+              {historyModal.day.exercises.length === 0 ? (
+                <div className="text-center py-6">
+                  <span className="text-3xl block mb-2">🌙</span>
+                  <p className="text-sm font-semibold text-gray-500">Día de descanso activo</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {historyModal.day.exercises.map(ex => {
+                    const details: string[] = []
+                    if (ex.duration) details.push(`${ex.duration} min`)
+                    if (ex.distance) details.push(`${ex.distance} km`)
+                    if (ex.pace) details.push(ex.pace)
+                    if (ex.heartRateZone) details.push(`Zona ${ex.heartRateZone}`)
+                    return (
+                      <div key={ex.id} className="flex gap-3 bg-[#FAFAFA] rounded-xl border border-[#E8E9EB] p-3.5">
+                        <span className="text-lg flex-shrink-0 mt-0.5">{ex.type === 'strength' ? '💪' : '🏃'}</span>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-gray-900 leading-tight">{ex.name}</p>
+                          {details.length > 0 && <p className="text-xs text-[#7A7E85] mt-1">{details.join(' · ')}</p>}
+                          {ex.notes && <p className="text-[11px] text-gray-400 italic mt-1 leading-tight">{ex.notes}</p>}
+                          <span className="inline-block mt-1.5 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded"
+                            style={{ background: ex.type === 'cardio' ? 'rgba(4,120,87,0.07)' : 'rgba(99,102,241,0.07)', color: ex.type === 'cardio' ? '#047857' : '#6366F1' }}>
+                            {ex.type === 'cardio' ? 'Cardio' : 'Fuerza'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Feedback form */}
+              {historySaved ? (
+                <div className="text-center py-6 bg-[#ECFDF5] rounded-2xl border border-[#A7F3D0]">
+                  <span className="text-3xl block mb-2">✓</span>
+                  <p className="text-sm font-bold text-[#047857]">¡Sesión registrada!</p>
+                  <button onClick={() => setHistorySaved(false)}
+                    className="mt-3 text-xs text-[#047857] underline">
+                    Editar
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-bold text-gray-700 mb-2">¿Cómo te sentiste?</p>
+                    <div className="flex gap-2">
+                      {EMOJI_OPTIONS.map(opt => (
+                        <button key={opt.value} type="button"
+                          onClick={() => { setHistoryEmoji(opt.emoji); setHistoryRating(opt.value) }}
+                          className="flex-1 flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 transition-all"
+                          style={{
+                            borderColor: historyEmoji === opt.emoji ? '#1C1F23' : '#E8E9EB',
+                            background: historyEmoji === opt.emoji ? '#1C1F23' : '#fff',
+                          }}>
+                          <span className="text-xl">{opt.emoji}</span>
+                          <span className="text-[8px] font-semibold leading-tight text-center"
+                            style={{ color: historyEmoji === opt.emoji ? 'rgba(255,255,255,0.7)' : '#9CA3AF' }}>
+                            {opt.label.split(' / ')[0]}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-bold text-gray-700 mb-1.5">Notas (opcional)</p>
+                    <textarea
+                      value={historyComments}
+                      onChange={e => setHistoryComments(e.target.value)}
+                      rows={2}
+                      placeholder="¿Cómo fue la sesión?"
+                      className="w-full text-sm border border-[#E8E9EB] rounded-xl px-3 py-2.5 focus:outline-none focus:border-gray-400 resize-none bg-[#FAFAFA]"
+                    />
+                  </div>
+
+                  <div className="flex gap-2 pt-1">
+                    {historyModal.day.feedback?.completed && (
+                      <button type="button"
+                        onClick={() => handleSaveHistorySession(false)}
+                        className="flex-1 py-3 rounded-xl text-sm font-bold border border-[#E8E9EB] text-gray-500 hover:bg-gray-50 transition-colors">
+                        Desmarcar
+                      </button>
+                    )}
+                    <button type="button"
+                      onClick={() => handleSaveHistorySession(true)}
+                      className="flex-1 py-3 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-[0.98]"
+                      style={{ background: '#1C1F23' }}>
+                      {historyModal.day.feedback?.completed ? 'Actualizar' : 'Marcar como completada ✓'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
