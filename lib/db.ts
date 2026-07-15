@@ -115,7 +115,173 @@ const SEED_ATHLETES: Athlete[] = [
   }
 ];
 
-// Seed plans including Enrique's real 5-week plan
+// Enrique's plan 2 — weeks 6-10, G15 Gatorade
+const ENRIQUE_PLAN_2: TrainingPlan = {
+  id: 'plan-enrique-2',
+  name: 'Preparación G15 Gatorade',
+  athleteId: '4',
+  startDate: '2026-07-13',
+  endDate: '2026-08-16',
+  createdAt: '2026-07-13',
+  weeks: [
+    {
+      id: 'p2w6', weekNumber: 6,
+      days: [
+        { id: 'p2w6d1', date: '2026-07-13', dayLabel: 'Lunes 13 jul', exercises: [
+          { id: 'p2w6e1', type: 'strength', name: 'Fuerza (Recovery)', notes: 'Movilidad y estiramientos activos' },
+          { id: 'p2w6e2', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w6d2', date: '2026-07-14', dayLabel: 'Martes 14 jul', exercises: [
+          { id: 'p2w6e3', type: 'cardio', name: 'Rodaje ZONA 1', duration: 60, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w6d3', date: '2026-07-15', dayLabel: 'Miércoles 15 jul', exercises: [
+          { id: 'p2w6e4', type: 'cardio',   name: 'Bici', duration: 30 },
+          { id: 'p2w6e5', type: 'strength', name: 'Fuerza', notes: 'Rutina de Core y Fuerza General' },
+        ]},
+        { id: 'p2w6d4', date: '2026-07-16', dayLabel: 'Jueves 16 jul', exercises: [
+          { id: 'p2w6e6', type: 'cardio', name: 'Rodaje ZONA 1', duration: 60, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w6d5', date: '2026-07-17', dayLabel: 'Viernes 17 jul', exercises: [
+          { id: 'p2w6e7', type: 'strength', name: 'Fuerza', notes: 'Core y Movilidad' },
+          { id: 'p2w6e8', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w6d6', date: '2026-07-18', dayLabel: 'Sábado 18 jul', exercises: [
+          { id: 'p2w6e9',  type: 'cardio', name: 'Warm up', duration: 20, notes: 'Calentamiento suave' },
+          { id: 'p2w6e10', type: 'cardio', name: '3 x 3000m ZONA 2', distance: 9, pace: '4:45-4:55 min/km', notes: '3 repeticiones de 3 km en Z2 con pausa de 2 min entre series' },
+          { id: 'p2w6e11', type: 'cardio', name: 'Cool down', duration: 10 },
+        ]},
+        { id: 'p2w6d7', date: '2026-07-19', dayLabel: 'Domingo 19 jul', exercises: [
+          { id: 'p2w6e12', type: 'cardio', name: 'Tirada Larga ZONA 1', duration: 90, pace: '5:45-5:55 min/km', notes: 'Tirada larga aeróbica' },
+        ]},
+      ]
+    },
+    {
+      id: 'p2w7', weekNumber: 7,
+      days: [
+        { id: 'p2w7d1', date: '2026-07-20', dayLabel: 'Lunes 20 jul', exercises: [
+          { id: 'p2w7e1', type: 'strength', name: 'Fuerza', notes: 'Movilidad y estiramientos activos' },
+          { id: 'p2w7e2', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w7d2', date: '2026-07-21', dayLabel: 'Martes 21 jul', exercises: [
+          { id: 'p2w7e3', type: 'cardio', name: 'Rodaje ZONA 1', duration: 50, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w7d3', date: '2026-07-22', dayLabel: 'Miércoles 22 jul', exercises: [
+          { id: 'p2w7e4', type: 'cardio',   name: 'Bici', duration: 40 },
+          { id: 'p2w7e5', type: 'strength', name: 'Fuerza', notes: 'Rutina de Core y Fuerza General' },
+        ]},
+        { id: 'p2w7d4', date: '2026-07-23', dayLabel: 'Jueves 23 jul', exercises: [
+          { id: 'p2w7e6', type: 'cardio', name: 'Rodaje ZONA 1', duration: 60, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w7d5', date: '2026-07-24', dayLabel: 'Viernes 24 jul', exercises: [
+          { id: 'p2w7e7', type: 'strength', name: 'Fuerza', notes: 'Core y Movilidad' },
+          { id: 'p2w7e8', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w7d6', date: '2026-07-25', dayLabel: 'Sábado 25 jul', exercises: [
+          { id: 'p2w7e9',  type: 'cardio', name: 'Warm up', duration: 20 },
+          { id: 'p2w7e10', type: 'cardio', name: '2 x 4000m ZONA 2', distance: 8, pace: '4:45-4:55 min/km', notes: '2 repeticiones de 4 km en Z2 con pausa de 3 min entre series' },
+          { id: 'p2w7e11', type: 'cardio', name: 'Cool down', duration: 10 },
+        ]},
+        { id: 'p2w7d7', date: '2026-07-26', dayLabel: 'Domingo 26 jul', exercises: [
+          { id: 'p2w7e12', type: 'cardio', name: 'Tirada Larga ZONA 1', duration: 80, pace: '5:45-5:55 min/km', notes: 'Tirada larga aeróbica' },
+        ]},
+      ]
+    },
+    {
+      id: 'p2w8', weekNumber: 8,
+      days: [
+        { id: 'p2w8d1', date: '2026-07-27', dayLabel: 'Lunes 27 jul', exercises: [
+          { id: 'p2w8e1', type: 'strength', name: 'Fuerza', notes: 'Movilidad y estiramientos activos' },
+          { id: 'p2w8e2', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w8d2', date: '2026-07-28', dayLabel: 'Martes 28 jul', exercises: [
+          { id: 'p2w8e3', type: 'cardio', name: 'Rodaje ZONA 1', duration: 60, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w8d3', date: '2026-07-29', dayLabel: 'Miércoles 29 jul', exercises: [
+          { id: 'p2w8e4', type: 'cardio',   name: 'Bici', duration: 30 },
+          { id: 'p2w8e5', type: 'strength', name: 'Fuerza', notes: 'Rutina de Core y Fuerza General' },
+        ]},
+        { id: 'p2w8d4', date: '2026-07-30', dayLabel: 'Jueves 30 jul', exercises: [
+          { id: 'p2w8e6', type: 'cardio', name: 'Rodaje ZONA 1', duration: 65, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w8d5', date: '2026-07-31', dayLabel: 'Viernes 31 jul', exercises: [
+          { id: 'p2w8e7', type: 'strength', name: 'Fuerza', notes: 'Core y Movilidad' },
+          { id: 'p2w8e8', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w8d6', date: '2026-08-01', dayLabel: 'Sábado 1 ago', exercises: [
+          { id: 'p2w8e9',  type: 'cardio', name: 'Warm up', duration: 20 },
+          { id: 'p2w8e10', type: 'cardio', name: '4K + 3K + 2K + 1K ZONA 2', distance: 10, pace: '4:45-4:55 min/km', notes: 'Series: 4K → pausa 3 min · 3K → pausa 2\'30 · 2K → pausa 2 min · 1K' },
+          { id: 'p2w8e11', type: 'cardio', name: 'Cool down', duration: 10 },
+        ]},
+        { id: 'p2w8d7', date: '2026-08-02', dayLabel: 'Domingo 2 ago', exercises: [
+          { id: 'p2w8e12', type: 'cardio', name: 'Tirada Larga ZONA 1', duration: 90, pace: '5:45-5:55 min/km' },
+        ]},
+      ]
+    },
+    {
+      id: 'p2w9', weekNumber: 9,
+      days: [
+        { id: 'p2w9d1', date: '2026-08-03', dayLabel: 'Lunes 3 ago', exercises: [
+          { id: 'p2w9e1', type: 'strength', name: 'Fuerza', notes: 'Movilidad y estiramientos activos' },
+          { id: 'p2w9e2', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w9d2', date: '2026-08-04', dayLabel: 'Martes 4 ago', exercises: [
+          { id: 'p2w9e3', type: 'cardio', name: 'Rodaje ZONA 1', duration: 65, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w9d3', date: '2026-08-05', dayLabel: 'Miércoles 5 ago', exercises: [
+          { id: 'p2w9e4', type: 'cardio',   name: 'Bici', duration: 25 },
+          { id: 'p2w9e5', type: 'strength', name: 'Fuerza', notes: 'Rutina de Core y Fuerza General' },
+        ]},
+        { id: 'p2w9d4', date: '2026-08-06', dayLabel: 'Jueves 6 ago', exercises: [
+          { id: 'p2w9e6', type: 'cardio', name: 'Rodaje ZONA 1', duration: 70, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w9d5', date: '2026-08-07', dayLabel: 'Viernes 7 ago', exercises: [
+          { id: 'p2w9e7', type: 'strength', name: 'Fuerza', notes: 'Core y Movilidad' },
+          { id: 'p2w9e8', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w9d6', date: '2026-08-08', dayLabel: 'Sábado 8 ago', exercises: [
+          { id: 'p2w9e9',  type: 'cardio', name: 'Warm up', duration: 20 },
+          { id: 'p2w9e10', type: 'cardio', name: '10 x 1000m ZONA 2 y 3', distance: 10, pace: '4:30-4:55 min/km', notes: '10 series de 1 km alternando Z2 y Z3 con pausa de 1 min entre series' },
+          { id: 'p2w9e11', type: 'cardio', name: 'Cool down', duration: 10 },
+        ]},
+        { id: 'p2w9d7', date: '2026-08-09', dayLabel: 'Domingo 9 ago', exercises: [
+          { id: 'p2w9e12', type: 'cardio', name: 'Tirada Larga ZONA 1', duration: 105, pace: '5:45-5:55 min/km', notes: '1h 45 min · tirada larga aeróbica' },
+        ]},
+      ]
+    },
+    {
+      id: 'p2w10', weekNumber: 10,
+      days: [
+        { id: 'p2w10d1', date: '2026-08-10', dayLabel: 'Lunes 10 ago', exercises: [
+          { id: 'p2w10e1', type: 'strength', name: 'Fuerza', notes: 'Movilidad y estiramientos activos' },
+          { id: 'p2w10e2', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w10d2', date: '2026-08-11', dayLabel: 'Martes 11 ago', exercises: [
+          { id: 'p2w10e3', type: 'cardio', name: 'Rodaje ZONA 1', duration: 70, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w10d3', date: '2026-08-12', dayLabel: 'Miércoles 12 ago', exercises: [
+          { id: 'p2w10e4', type: 'cardio',   name: 'Bici', duration: 30 },
+          { id: 'p2w10e5', type: 'strength', name: 'Fuerza', notes: 'Rutina de Core y Fuerza General' },
+        ]},
+        { id: 'p2w10d4', date: '2026-08-13', dayLabel: 'Jueves 13 ago', exercises: [
+          { id: 'p2w10e6', type: 'cardio', name: 'Rodaje ZONA 1', duration: 60, pace: '5:45-5:55 min/km' },
+        ]},
+        { id: 'p2w10d5', date: '2026-08-14', dayLabel: 'Viernes 14 ago', exercises: [
+          { id: 'p2w10e7', type: 'strength', name: 'Fuerza', notes: 'Core y Movilidad' },
+          { id: 'p2w10e8', type: 'cardio',   name: 'Natación suave', duration: 45 },
+        ]},
+        { id: 'p2w10d6', date: '2026-08-15', dayLabel: 'Sábado 15 ago', exercises: [
+          { id: 'p2w10e9',  type: 'cardio', name: 'Rodaje ZONA 1', duration: 25, pace: '5:45-5:55 min/km', notes: 'Trote suave pre-competencia' },
+          { id: 'p2w10e10', type: 'cardio', name: 'Aceleraciones 8 x 100m', distance: 0.8, notes: '8 aceleraciones de 100 metros con pausa de 1 min entre cada una' },
+        ]},
+        { id: 'p2w10d7', date: '2026-08-16', dayLabel: 'Domingo 16 ago', exercises: [
+          { id: 'p2w10e11', type: 'cardio', name: 'COMPETENCIA G15 Gatorade 🏁', notes: '¡Día de carrera! A romperla!' },
+        ]},
+      ]
+    },
+  ]
+};
+
+// Seed plans including Enrique's real plans (weeks 1-5 and 6-10)
 const SEED_PLANS: TrainingPlan[] = [
   ...MOCK_PLANS,
   {
@@ -463,7 +629,8 @@ const SEED_PLANS: TrainingPlan[] = [
         ]
       }
     ]
-  }
+  },
+  ENRIQUE_PLAN_2,
 ];
 
 export function isBrowser(): boolean {
@@ -490,6 +657,19 @@ export function initDB(forceSeed = false) {
     localStorage.setItem(KEY_ATHLETES, JSON.stringify(SEED_ATHLETES));
     localStorage.setItem(KEY_PLANS, JSON.stringify(SEED_PLANS));
     localStorage.setItem(KEY_COACH, JSON.stringify(DEFAULT_COACH));
+  }
+
+  // Migration: inject plan-enrique-2 if missing
+  const plansRawMig = localStorage.getItem(KEY_PLANS)
+  if (plansRawMig) {
+    try {
+      const plans: TrainingPlan[] = JSON.parse(plansRawMig)
+      if (!plans.some(p => p.id === 'plan-enrique-2')) {
+        const updated = [...plans, ENRIQUE_PLAN_2]
+        localStorage.setItem(KEY_PLANS, JSON.stringify(updated))
+        pushPlansToSupabase(updated).catch(() => {})
+      }
+    } catch {}
   }
 
   const currentLib = localStorage.getItem(KEY_STRENGTH_LIBRARY);
