@@ -451,6 +451,34 @@ export default function AthleteDashboard() {
     setSaved(true)
   }
 
+  const handleMarkWeekComplete = (targetPlan: TrainingPlan, weekId: string, markComplete: boolean) => {
+    if (!athlete) return
+    const updatedWeeks = targetPlan.weeks.map(week => {
+      if (week.id !== weekId) return week
+      return {
+        ...week,
+        days: week.days.map(d => ({
+          ...d,
+          feedback: markComplete
+            ? {
+                completed: true,
+                feelingRating: d.feedback?.feelingRating || 3,
+                feelingEmoji: d.feedback?.feelingEmoji || '😐',
+                comments: d.feedback?.comments || '',
+                loggedAt: d.feedback?.loggedAt || new Date().toISOString().split('T')[0],
+              }
+            : { ...d.feedback, completed: false }
+        }))
+      }
+    })
+    const updatedPlan = { ...targetPlan, weeks: updatedWeeks }
+    const all = getPlans()
+    savePlans(all.map(p => p.id === targetPlan.id ? updatedPlan : p))
+    setAllPlans(prev => prev.map(p => p.id === targetPlan.id ? updatedPlan : p))
+    if (plan?.id === targetPlan.id) setPlan(updatedPlan)
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('athlete-session-saved'))
+  }
+
   const openHistoryDay = (day: TrainingDay, p: TrainingPlan) => {
     setHistoryModal({ day, plan: p })
     setHistoryEmoji(day.feedback?.feelingEmoji || '')
@@ -1535,13 +1563,42 @@ export default function AthleteDashboard() {
                       {p.weeks.map(week => {
                         const weekDays = week.days
                         const doneinWeek = weekDays.filter(d => d.feedback?.completed).length
+                        const allDone = doneinWeek === weekDays.length
+                        const someDone = doneinWeek > 0 && !allDone
                         return (
                           <div key={week.id}>
                             <div className="flex items-center justify-between mb-2">
-                              <p className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
-                                Semana {week.weekNumber}
-                              </p>
-                              <span className="text-[10px] text-gray-400 font-semibold">{doneinWeek}/{weekDays.length} ✓</span>
+                              <div className="flex items-center gap-2">
+                                {/* Checkbox — check all / uncheck all */}
+                                <button
+                                  type="button"
+                                  onClick={() => handleMarkWeekComplete(p, week.id, !allDone)}
+                                  className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all"
+                                  style={{
+                                    borderColor: allDone ? '#047857' : someDone ? '#047857' : '#D1D5DB',
+                                    background: allDone ? '#047857' : someDone ? 'rgba(4,120,87,0.12)' : '#fff',
+                                  }}
+                                  title={allDone ? 'Desmarcar semana' : 'Marcar semana completa'}
+                                >
+                                  {allDone && <span className="text-white text-[9px] font-black leading-none">✓</span>}
+                                  {someDone && <span className="text-[#047857] text-[9px] font-black leading-none">–</span>}
+                                </button>
+                                <p className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">
+                                  Semana {week.weekNumber}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                {!allDone && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleMarkWeekComplete(p, week.id, true)}
+                                    className="text-[9px] font-bold text-[#047857] bg-[#ECFDF5] border border-[#A7F3D0] px-2 py-0.5 rounded-full hover:bg-[#D1FAE5] transition-colors"
+                                  >
+                                    Marcar todo ✓
+                                  </button>
+                                )}
+                                <span className="text-[10px] text-gray-400 font-semibold">{doneinWeek}/{weekDays.length}</span>
+                              </div>
                             </div>
                             <div className="grid grid-cols-7 gap-1.5">
                               {weekDays.map(day => {
