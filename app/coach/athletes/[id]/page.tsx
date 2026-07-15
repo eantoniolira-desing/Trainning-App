@@ -520,7 +520,7 @@ export default function AthleteProfilePage() {
                             {goal.title}
                           </p>
                           <p className="text-[9px] text-[#7A7E85] mt-0.5">
-                            Meta: {new Date(goal.targetDate).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                            Meta: {new Date(goal.targetDate + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
                           </p>
                           {goal.result && <p className="text-[9px] text-emerald-600 font-semibold mt-0.5">Resultado: {goal.result}</p>}
                           {goal.notes && <p className="text-[9px] text-[#7A7E85] italic mt-0.5">{goal.notes}</p>}
