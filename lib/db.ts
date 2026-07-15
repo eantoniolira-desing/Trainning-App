@@ -746,10 +746,19 @@ export async function fetchPlansFromSupabase(athleteId: string): Promise<Trainin
       weeks: p.weeks as TrainingPlan['weeks'],
       createdAt: p.created_at as string,
     }));
-    // Write back to localStorage so getPlans() stays in sync
-    const allLocal = getPlans().filter(p => p.athleteId !== athleteId);
-    localStorage.setItem(KEY_PLANS, JSON.stringify([...allLocal, ...remote]));
-    return remote;
+    // Merge: for each plan keep whichever version has more completed days (most recent progress)
+    const localPlans = getPlans();
+    const doneCount = (plan: TrainingPlan) =>
+      plan.weeks.flatMap(w => w.days).filter(d => d.feedback?.completed).length;
+    const merged = remote.map(remotePlan => {
+      const localPlan = localPlans.find(lp => lp.id === remotePlan.id);
+      if (!localPlan) return remotePlan;
+      return doneCount(localPlan) >= doneCount(remotePlan) ? localPlan : remotePlan;
+    });
+    // Persist merged result so localStorage stays in sync
+    const others = localPlans.filter(p => p.athleteId !== athleteId);
+    localStorage.setItem(KEY_PLANS, JSON.stringify([...others, ...merged]));
+    return merged;
   } catch {
     return getPlans().filter(p => p.athleteId === athleteId);
   }
