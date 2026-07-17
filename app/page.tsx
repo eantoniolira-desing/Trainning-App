@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getAthletes, getCoachProfile, initDB } from '@/lib/db'
+import { getAthletes, getCoachProfile, initDB, syncFromSupabase } from '@/lib/db'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -16,7 +16,7 @@ export default function LoginPage() {
     initDB()
   }, [])
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
@@ -42,6 +42,7 @@ export default function LoginPage() {
         return
       }
 
+      try { await syncFromSupabase() } catch {}
       const athletes = getAthletes()
       const found = athletes.find(
         a => a.username?.toLowerCase() === username.trim().toLowerCase() && a.password === password
@@ -51,7 +52,7 @@ export default function LoginPage() {
         localStorage.setItem('active_athlete_id', found.id)
         router.push('/athlete/dashboard')
       } else {
-        setError('Usuario o contraseña de atleta incorrectos. (Prueba con carlos / 123)')
+        setError('Usuario o contraseña de atleta incorrectos.')
       }
     }
   }

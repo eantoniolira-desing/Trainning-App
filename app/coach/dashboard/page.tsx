@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { getAthletes, getPlans, saveAthletes } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, syncFromSupabase } from '@/lib/db'
 import { Athlete, TrainingPlan } from '@/lib/types'
 
 export default function CoachDashboard() {
@@ -16,6 +16,10 @@ export default function CoachDashboard() {
     setAthletes(getAthletes())
     setPlans(getPlans())
     setMounted(true)
+    syncFromSupabase().then(() => {
+      setAthletes(getAthletes())
+      setPlans(getPlans())
+    }).catch(() => {})
   }, [])
 
   if (!mounted) {

@@ -3,7 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, fetchNotificationsForAthlete } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, savePlans, getStrengthLibrary, fetchNotificationsForAthlete, fetchAthletePhotoFromSupabase, pushAthletePhotoToSupabase, syncFromSupabase } from '@/lib/db'
 import { Athlete, TrainingPlan, TrainingDay, StrengthExercise, NotificationEntry } from '@/lib/types'
 
 const AVATAR_COLORS = ['#4A4F57', '#3a3f47', '#5a5f67', '#2d3035', '#4A4F57']
@@ -65,15 +65,29 @@ export default function AthleteProfilePage() {
       loadPlans()
     }
     
-    try { 
-      setPhoto(localStorage.getItem(PHOTO_KEY(id))) 
+    try {
+      setPhoto(localStorage.getItem(PHOTO_KEY(id)) || found?.photo || null)
     } catch {}
+    fetchAthletePhotoFromSupabase(id).then(remotePhoto => {
+      if (remotePhoto) {
+        try { localStorage.setItem(PHOTO_KEY(id), remotePhoto) } catch {}
+        setPhoto(remotePhoto)
+      }
+    }).catch(() => {})
     
     setStrengthExercises(getStrengthLibrary())
     setMounted(true)
 
     // Load notifications from Supabase (fresh, cross-device)
     fetchNotificationsForAthlete(id).then(notifs => setSessionNotifs(notifs)).catch(() => {})
+
+    // Background sync — critical for new browsers where localStorage is empty
+    syncFromSupabase().then(() => {
+      const refreshedAll = getAthletes()
+      const refreshedAthlete = refreshedAll.find(a => a.id === id)
+      if (refreshedAthlete) setAthlete(refreshedAthlete)
+      loadPlans()
+    }).catch(() => {})
 
     if (typeof window !== 'undefined') {
       window.addEventListener('chat-reply-saved', loadPlans)
@@ -86,9 +100,8 @@ export default function AthleteProfilePage() {
     reader.onload = e => {
       const url = e.target?.result as string
       setPhoto(url)
-      try { 
-        localStorage.setItem(PHOTO_KEY(id), url) 
-      } catch {}
+      try { localStorage.setItem(PHOTO_KEY(id), url) } catch {}
+      pushAthletePhotoToSupabase(id, url)
     }
     reader.readAsDataURL(file)
   }

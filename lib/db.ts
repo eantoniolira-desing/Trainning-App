@@ -1226,15 +1226,22 @@ export function saveAthleteNotifications(notifs: AthleteNotificationEntry[]) {
 
 async function pushAthletesToSupabase(athletes: Athlete[]) {
   if (!isBrowser()) return;
-  const rows = athletes.map(a => ({
+  const baseRow = (a: Athlete) => ({
     id: a.id, name: a.name, age: a.age, sport: a.sport, goal: a.goal,
     email: a.email || null, phone: a.phone || null, active: a.active,
     joined_at: a.joinedAt, username: a.username || null, password: a.password || null,
     zone1: a.zone1 || null, zone2: a.zone2 || null, zone3: a.zone3 || null,
     gender: a.gender, status: a.status, start_of_week_day: a.startOfWeekDay || null,
     personal_bests: a.personalBests || null, goals: a.goals || [],
-  }));
-  await supabase.from('athletes').upsert(rows);
+  });
+  const rowsWithPhoto = athletes.map(a => ({ ...baseRow(a), photo: a.photo || null }));
+  const { error } = await supabase.from('athletes').upsert(rowsWithPhoto);
+  if (error) {
+    console.error('[pushAthletesToSupabase] error (maybe missing photo column):', error.message);
+    // Retry without photo column in case it doesn't exist yet
+    const { error: e2 } = await supabase.from('athletes').upsert(athletes.map(baseRow));
+    if (e2) console.error('[pushAthletesToSupabase] retry failed:', e2.message);
+  }
   const ids = athletes.map(a => a.id);
   if (ids.length > 0) {
     const { data: existing } = await supabase.from('athletes').select('id');
@@ -1343,17 +1350,34 @@ export async function syncFromSupabase(): Promise<void> {
         startOfWeekDay: a.start_of_week_day as Athlete['startOfWeekDay'],
         personalBests: a.personal_bests as Athlete['personalBests'],
         goals: (a.goals as Athlete['goals']) || [],
+        photo: (a.photo as string) || undefined,
       }));
       localStorage.setItem(KEY_ATHLETES, JSON.stringify(mapped));
+      mapped.forEach(a => {
+        if (a.photo) {
+          try { localStorage.setItem(`athlete-photo-${a.id}`, a.photo) } catch {}
+        }
+      });
     }
 
     if (plans && plans.length > 0) {
-      const mapped: TrainingPlan[] = plans.map((p: Record<string, unknown>) => ({
+      const remote: TrainingPlan[] = plans.map((p: Record<string, unknown>) => ({
         id: p.id as string, name: p.name as string, athleteId: p.athlete_id as string,
         startDate: p.start_date as string, endDate: p.end_date as string,
         weeks: p.weeks as TrainingPlan['weeks'], createdAt: p.created_at as string,
       }));
-      localStorage.setItem(KEY_PLANS, JSON.stringify(mapped));
+      // Merge: keep whichever version has more completed days (preserves local progress)
+      const local = getPlans();
+      const doneCount = (plan: TrainingPlan) =>
+        plan.weeks.flatMap(w => w.days).filter(d => d.feedback?.completed).length;
+      const merged = remote.map(rp => {
+        const lp = local.find(l => l.id === rp.id);
+        return !lp ? rp : doneCount(lp) >= doneCount(rp) ? lp : rp;
+      });
+      // Keep any local plans not yet in Supabase
+      const remoteIds = new Set(remote.map(p => p.id));
+      const localOnly = local.filter(p => !remoteIds.has(p.id));
+      localStorage.setItem(KEY_PLANS, JSON.stringify([...merged, ...localOnly]));
     }
 
     if (coachData) {
@@ -1391,6 +1415,57 @@ export async function syncFromSupabase(): Promise<void> {
   } catch {
     // Fail silently — app falls back to localStorage data
   }
+}
+
+export async function fetchAthletePhotoFromSupabase(athleteId: string): Promise<string | null> {
+  if (!isBrowser()) return null;
+  try {
+    const { data, error } = await supabase
+      .from('athletes')
+      .select('photo')
+      .eq('id', athleteId)
+      .maybeSingle();
+    if (error) { console.error('[fetchAthletePhoto] Supabase error:', error.message); return null; }
+    const photo = (data as Record<string, unknown> | null)?.photo as string | null;
+    console.log('[fetchAthletePhoto] Supabase returned photo:', photo ? `${photo.length} chars` : 'null/empty');
+    return photo || null;
+  } catch (e) {
+    console.error('[fetchAthletePhoto] exception:', e);
+    return null;
+  }
+}
+
+export async function pushAthletePhotoToSupabase(athleteId: string, photo: string, username?: string): Promise<void> {
+  if (!isBrowser()) return;
+
+  // Intento 1: por ID
+  const { error, data } = await supabase
+    .from('athletes')
+    .update({ photo })
+    .eq('id', athleteId)
+    .select('id');
+  if (!error && data && (data as unknown[]).length > 0) {
+    console.log('[pushAthletePhoto] OK por id:', athleteId, 'size:', photo.length);
+    return;
+  }
+
+  // Intento 2: por username (si el ID local no coincide con Supabase)
+  if (username) {
+    const { error: e2, data: d2 } = await supabase
+      .from('athletes')
+      .update({ photo })
+      .eq('username', username)
+      .select('id');
+    if (!e2 && d2 && (d2 as unknown[]).length > 0) {
+      console.log('[pushAthletePhoto] OK por username:', username, 'size:', photo.length);
+      return;
+    }
+    console.error('[pushAthletePhoto] falló por username:', e2?.message);
+    throw new Error(e2?.message || 'sin filas actualizadas por username');
+  }
+
+  console.error('[pushAthletePhoto] falló por id:', error?.message, 'id:', athleteId);
+  throw new Error(error?.message || 'sin filas actualizadas');
 }
 
 export function addReplyToSession(planId: string, dayId: string, reply: CommentReply) {

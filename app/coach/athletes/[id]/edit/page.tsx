@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { getAthletes, saveAthletes } from '@/lib/db'
+import { getAthletes, saveAthletes, syncFromSupabase } from '@/lib/db'
 import { Athlete } from '@/lib/types'
 
 const AVATAR_COLORS = ['#4A4F57', '#3a3f47', '#5a5f67', '#2d3035', '#4A4F57']
@@ -48,6 +48,7 @@ export default function EditAthletePage() {
   })
 
   useEffect(() => {
+    syncFromSupabase().catch(() => {})
     const all = getAthletes()
     const found = all.find(a => a.id === id)
     const index = all.findIndex(a => a.id === id)

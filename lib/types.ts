@@ -90,6 +90,7 @@ export interface Athlete {
     pb42k?: string
   }
   goals?: GoalEntry[]
+  photo?: string
 }
 
 export interface CoachProfile {

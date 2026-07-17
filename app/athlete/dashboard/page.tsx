@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { getAthletes, getPlans, saveAthletes, savePlans, upsertSinglePlan, getStrengthLibrary, getNotifications, saveNotifications, addReplyToSession } from '@/lib/db'
+import { getAthletes, getPlans, saveAthletes, savePlans, upsertSinglePlan, getStrengthLibrary, getNotifications, saveNotifications, addReplyToSession, pushAthletePhotoToSupabase, fetchAthletePhotoFromSupabase, syncFromSupabase } from '@/lib/db'
 import type { Athlete, TrainingPlan, TrainingDay, ExerciseLog, StrengthExercise, NotificationEntry, CommentReply } from '@/lib/types'
 
 function RpeButton({ n, active, onClick }: { n: number; active: boolean; onClick: () => void }) {
@@ -59,7 +59,13 @@ export default function AthleteDashboard() {
   const [mounted, setMounted] = useState(false)
   const [expandedHistoryPlanIds, setExpandedHistoryPlanIds] = useState<Set<string>>(new Set())
   const [photo, setPhoto] = useState<string | null>(null)
-  const photoRef = useRef<HTMLInputElement>(null)
+  const [photoSyncStatus, setPhotoSyncStatus] = useState<'idle' | 'syncing' | 'ok' | 'error'>('idle')
+  useEffect(() => {
+    if (photoSyncStatus === 'ok') {
+      const t = setTimeout(() => setPhotoSyncStatus('idle'), 4000)
+      return () => clearTimeout(t)
+    }
+  }, [photoSyncStatus])
   const loggerRef = useRef<HTMLDivElement>(null)
   
   const [logs, setLogs] = useState<Record<string, Partial<ExerciseLog>>>({})
@@ -229,10 +235,28 @@ export default function AthleteDashboard() {
     }
     setAthlete(currentAthlete)
 
-    // Load photo
+    // Load photo from localStorage first, then refresh from Supabase in background
     try {
-      setPhoto(localStorage.getItem(`athlete-photo-${athleteId}`))
+      setPhoto(localStorage.getItem(`athlete-photo-${athleteId}`) || currentAthlete.photo || null)
     } catch {}
+
+    const refreshPhotoFromSupabase = () => {
+      fetchAthletePhotoFromSupabase(athleteId).then(remotePhoto => {
+        if (remotePhoto) {
+          try { localStorage.setItem(`athlete-photo-${athleteId}`, remotePhoto) } catch {}
+          setPhoto(remotePhoto)
+        }
+      }).catch(() => {})
+    }
+
+    refreshPhotoFromSupabase()
+
+    // Re-sync when user returns to this tab
+    const handleVisibility = () => { if (!document.hidden) refreshPhotoFromSupabase() }
+    document.addEventListener('visibilitychange', handleVisibility)
+
+    // Poll every 30s so cross-device photo uploads appear automatically
+    const photoPoller = setInterval(refreshPhotoFromSupabase, 30000)
 
     // Load all plans + active plan
     const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -269,36 +293,95 @@ export default function AthleteDashboard() {
     setStrengthExercises(getStrengthLibrary())
 
     setMounted(true)
+
+    // Background sync from Supabase — updates state with fresh data (critical for new devices)
+    syncFromSupabase().then(() => {
+      const today2 = new Date(); today2.setHours(0,0,0,0)
+      const freshAthlete = getAthletes().find(a => a.id === athleteId)
+      const freshPlans = getPlans()
+        .filter(p => p.athleteId === athleteId)
+        .sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime())
+      if (freshAthlete) setAthlete(freshAthlete)
+      if (freshPlans.length > 0) {
+        setAllPlans(freshPlans)
+        setPlan(prev => freshPlans.find(p => p.id === prev?.id)
+          ?? freshPlans.find(p => new Date(p.endDate) >= today2)
+          ?? freshPlans[0])
+        setSession(prev => {
+          if (!prev) return prev
+          for (const fp of freshPlans)
+            for (const w of fp.weeks) {
+              const d = w.days.find(d => d.id === prev.id)
+              if (d) return d
+            }
+          return prev
+        })
+      }
+    }).catch(() => {})
+
+    return () => { document.removeEventListener('visibilitychange', handleVisibility); clearInterval(photoPoller) }
   }, [router])
 
   const handlePhotoUpload = (file: File) => {
-    if (!athlete) return
+    if (!athlete) { setPhotoSyncStatus('error'); return }
+    setPhotoSyncStatus('syncing')
     const reader = new FileReader()
-    reader.onload = e => {
-      const original = e.target?.result as string
+    reader.onerror = () => setPhotoSyncStatus('error')
+    reader.onload = ev => {
+      const src = ev.target?.result as string
+      if (!src) { setPhotoSyncStatus('error'); return }
       const img = new Image()
+      img.onerror = () => {
+        // Si la imagen no carga, sube el original sin comprimir
+        setPhoto(src)
+        try { localStorage.setItem(`athlete-photo-${athlete.id}`, src) } catch {}
+        pushAthletePhotoToSupabase(athlete.id, src, athlete.username || undefined)
+          .then(() => setPhotoSyncStatus('ok'))
+          .catch(() => setPhotoSyncStatus('error'))
+      }
       img.onload = () => {
-        const MAX = 400
-        let w = img.width, h = img.height
-        if (w > h) { if (w > MAX) { h = Math.round(h * MAX / w); w = MAX } }
-        else        { if (h > MAX) { w = Math.round(w * MAX / h); h = MAX } }
-        const canvas = document.createElement('canvas')
-        canvas.width = w
-        canvas.height = h
-        canvas.getContext('2d')!.drawImage(img, 0, 0, w, h)
-        const compressed = canvas.toDataURL('image/jpeg', 0.82)
-        setPhoto(compressed)
         try {
-          localStorage.setItem(`athlete-photo-${athlete.id}`, compressed)
+          const MAX = 400
+          const scale = Math.min(1, MAX / Math.max(img.width, img.height))
+          const w = Math.round(img.width * scale)
+          const h = Math.round(img.height * scale)
+          const canvas = document.createElement('canvas')
+          canvas.width = w; canvas.height = h
+          const ctx = canvas.getContext('2d')
+          let dataUrl = src
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h)
+            dataUrl = canvas.toDataURL('image/jpeg', 0.82)
+            if (dataUrl.length > 400000) dataUrl = canvas.toDataURL('image/jpeg', 0.6)
+            if (dataUrl.length > 400000) dataUrl = canvas.toDataURL('image/jpeg', 0.4)
+          }
+          setPhoto(dataUrl)
+          try { localStorage.setItem(`athlete-photo-${athlete.id}`, dataUrl) } catch {}
           window.dispatchEvent(new Event('athlete-photo-updated'))
+          pushAthletePhotoToSupabase(athlete.id, dataUrl, athlete.username || undefined)
+            .then(() => setPhotoSyncStatus('ok'))
+            .catch(() => setPhotoSyncStatus('error'))
         } catch {
-          const smaller = canvas.toDataURL('image/jpeg', 0.5)
-          try { localStorage.setItem(`athlete-photo-${athlete.id}`, smaller); setPhoto(smaller) } catch {}
+          setPhotoSyncStatus('error')
         }
       }
-      img.src = original
+      img.src = src
     }
     reader.readAsDataURL(file)
+  }
+
+  const openPhotoPicker = () => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.style.cssText = 'position:fixed;top:-9999px;left:-9999px'
+    document.body.appendChild(input)
+    input.onchange = () => {
+      const file = input.files?.[0]
+      if (file) handlePhotoUpload(file)
+      document.body.removeChild(input)
+    }
+    input.click()
   }
 
   // Goal Handlers
@@ -591,30 +674,24 @@ export default function AthleteDashboard() {
           
           {/* Profile Card & Photo Uploader */}
           <div className="rounded-2xl p-6 bg-white border border-[#E8E9EB] shadow-sm flex flex-col items-center text-center relative animate-fade-up">
-            <input 
-              ref={photoRef} 
-              type="file" 
-              accept="image/*" 
-              className="hidden"
-              onChange={e => { if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]) }} 
-            />
-            <div className="relative group mb-4 cursor-pointer">
+            {/* Foto de perfil */}
+            <div className="mb-3">
               {photo ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={photo} alt={athlete.name} className="w-24 h-24 rounded-2xl object-cover border border-[#E8E9EB]" />
+                <img src={photo} alt={athlete.name} className="w-24 h-24 rounded-2xl object-cover border border-[#E8E9EB] mx-auto" />
               ) : (
-                <div className="w-24 h-24 rounded-2xl bg-[#4A4F57] flex items-center justify-center text-white text-3xl font-bold">
+                <div className="w-24 h-24 rounded-2xl bg-[#4A4F57] flex items-center justify-center text-white text-3xl font-bold mx-auto">
                   {athlete.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                 </div>
               )}
-              <div
-                onClick={() => photoRef.current?.click()}
-                className="absolute inset-0 rounded-2xl flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-                title="Cambiar foto"
-              >
-                <span className="text-white text-xs font-bold font-mono">📷 Editar</span>
-              </div>
             </div>
+            <button
+              type="button"
+              onClick={openPhotoPicker}
+              className="mb-3 px-3 py-1.5 rounded-xl text-[11px] font-bold border border-[#E8E9EB] text-[#4A4F57] hover:bg-gray-50 active:scale-95 transition-all"
+            >
+              📷 Cambiar foto
+            </button>
             
             <h2 className="text-xl font-bold text-gray-900 leading-tight">{athlete.name}</h2>
             <p className="text-xs text-[#7A7E85] mt-1 uppercase tracking-wider font-semibold">
@@ -1842,6 +1919,26 @@ export default function AthleteDashboard() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* BANNER de sincronización de foto — arriba, visible en móvil */}
+      {photoSyncStatus !== 'idle' && (
+        <div
+          className="fixed top-0 left-0 right-0 z-[200] flex items-center justify-center gap-3 py-4 px-6 text-sm font-bold shadow-2xl"
+          style={{
+            background: photoSyncStatus === 'ok' ? '#1C1F23' : photoSyncStatus === 'error' ? '#FF3B30' : '#4A4F57',
+            color: '#fff',
+          }}
+        >
+          {photoSyncStatus === 'syncing' && '⏳ Procesando foto...'}
+          {photoSyncStatus === 'ok' && `✅ Foto sincronizada (ID: ${athlete?.id})`}
+          {photoSyncStatus === 'error' && `❌ Error al sincronizar (ID: ${athlete?.id})`}
+          {photoSyncStatus !== 'syncing' && (
+            <button onClick={() => setPhotoSyncStatus('idle')} className="ml-4 underline text-white/80 text-xs">
+              Cerrar
+            </button>
+          )}
         </div>
       )}
 
